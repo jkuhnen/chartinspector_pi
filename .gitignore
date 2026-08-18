@@ -1,0 +1,28 @@
+# Build output
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# IDE / editor
+.vscode/
+.idea/
+*.user
+*.suo
+*.VC.db
+
+# Platform files
+.DS_Store
+Thumbs.db
+
+# Compiled artifacts
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.pdb
