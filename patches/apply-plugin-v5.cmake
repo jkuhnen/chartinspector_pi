@@ -291,13 +291,10 @@ if(NOT C MATCHES "OCPNChartInspectorHitTestV5")
   return true;
 }
 ]=])
-  replace_section(C "bool ChartInspectorPi::RenderGLOverlayMultiCanvas"
-                  "\n}"
-                  "${RENDER_GL}" C_TMP)
 
-  # The generic end marker above would find the first closing brace inside the
-  # function.  Since RenderGLOverlayMultiCanvas is the final function in this
-  # file, replace from its start to EOF instead.
+  # RenderGLOverlayMultiCanvas is the final function in this source file.
+  # Replace it from its signature through EOF instead of trying to detect a
+  # closing brace inside a function containing many nested scopes.
   string(FIND "${C}" "bool ChartInspectorPi::RenderGLOverlayMultiCanvas" GL_START)
   if(GL_START EQUAL -1)
     message(FATAL_ERROR "Could not locate RenderGLOverlayMultiCanvas")
