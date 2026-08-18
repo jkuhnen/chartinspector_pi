@@ -85,6 +85,10 @@ wxString S57Catalog::FormatAttributes(const wxString &rawAttributes,
     const wxString rawValue = Trimmed(line.Mid(equals + 1));
     if (acronym.StartsWith("$")) continue;
 
+    // SCAMIN/SCAMAX are portrayal metadata, useful for diagnostics but not
+    // useful in the normal readable object card. They remain in technical data.
+    if (acronym == "SCAMIN" || acronym == "SCAMAX") continue;
+
     wxString catalogLabel = acronym;
     auto attr = m_attributes.find(acronym);
     if (attr != m_attributes.end() && !attr->second.name.IsEmpty())
@@ -96,6 +100,22 @@ wxString S57Catalog::FormatAttributes(const wxString &rawAttributes,
     if (acronym == "CATGEO") {
       decoded = DecodeValue(acronym, rawValue);
       decodedAny = decoded != rawValue;
+    } else if (acronym == "HEIGHT") {
+      double metres = 0.0;
+      if (rawValue.ToDouble(&metres)) {
+        decoded = wxString::Format("%g m", metres);
+        decodedAny = true;
+      } else {
+        decoded = rawValue;
+      }
+    } else if (acronym == "VALNMR") {
+      double nauticalMiles = 0.0;
+      if (rawValue.ToDouble(&nauticalMiles)) {
+        decoded = wxString::Format("%g NM", nauticalMiles);
+        decodedAny = true;
+      } else {
+        decoded = rawValue;
+      }
     } else if (acronym == "DATSTA" || acronym == "DATEND" ||
                acronym == "PERSTA" || acronym == "PEREND" ||
                acronym == "RECDAT" || acronym == "SORDAT") {
@@ -157,10 +177,9 @@ wxString S57Catalog::UppercaseFirst(const wxString &value) {
 wxString S57Catalog::FriendlyLabel(const wxString &acronym,
                                    const wxString &catalogLabel) {
   if (acronym == "CATGEO") return "Geometry";
-  if (acronym == "SCAMIN") return "Minimum display scale";
-  if (acronym == "SCAMAX") return "Maximum display scale";
   if (acronym == "OBJNAM") return "Name";
   if (acronym == "NOBJNM") return "National name";
+  if (acronym == "VALNMR") return "Nominal range";
   return UppercaseFirst(catalogLabel);
 }
 
