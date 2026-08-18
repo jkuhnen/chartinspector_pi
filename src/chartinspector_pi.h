@@ -4,6 +4,7 @@
 #include <wx/wx.h>
 
 #include "ocpn_plugin.h"
+#include "s57_catalog.h"
 
 class wxPopupWindow;
 
@@ -70,6 +71,7 @@ private:
   wxPopupWindow *m_hoverPopup = nullptr;
   wxStaticText *m_hoverText = nullptr;
 
+  S57Catalog m_s57Catalog;
   HitTestFn m_hitTest = nullptr;
   HitTestV2Fn m_hitTestV2 = nullptr;
 };
