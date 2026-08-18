@@ -46,15 +46,32 @@ void ChartInspectorPi::SetCursorLatLon(double lat, double lon) {
 }
 
 bool ChartInspectorPi::MouseEventHook(wxMouseEvent &event) {
-  // Intentionally passive for the initial scaffold. Mouse events are enabled
-  // now so hit-testing and hover interaction can be developed incrementally.
-  (void)event;
+  m_mousePosition = event.GetPosition();
+  m_hasMousePosition = true;
+
+  wxWindow *canvas = GetOCPNCanvasWindow();
+  if (canvas) RequestRefresh(canvas);
+
   return false;
 }
 
 bool ChartInspectorPi::RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp) {
-  // Overlay rendering will be used for non-destructive hover highlighting.
-  (void)dc;
-  (void)vp;
-  return false;
+  if (!vp || !m_hasMousePosition || !m_hasCursorPosition) return false;
+
+  const int x = m_mousePosition.x;
+  const int y = m_mousePosition.y;
+
+  dc.SetBrush(*wxTRANSPARENT_BRUSH);
+  dc.SetPen(wxPen(wxColour(255, 0, 255), 2));
+  dc.DrawCircle(x, y, 8);
+  dc.DrawLine(x - 14, y, x + 14, y);
+  dc.DrawLine(x, y - 14, x, y + 14);
+
+  const wxString label = wxString::Format("%.5f, %.5f", m_cursorLat, m_cursorLon);
+  const wxPoint textPos(x + 16, y + 12);
+
+  dc.SetTextForeground(wxColour(255, 0, 255));
+  dc.DrawText(label, textPos);
+
+  return true;
 }
