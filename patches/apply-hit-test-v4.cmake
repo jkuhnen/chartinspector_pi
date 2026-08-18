@@ -33,7 +33,6 @@ extern "C" DECL_EXP bool OCPNChartInspectorHitTestV4(
       !marker_lon)
     return false;
 
-  // Native S-57 already honours MASK_ALL in V3. Keep that tested path.
   if (canvas_index < 0 ||
       static_cast<size_t>(canvas_index) >= g_canvasArray.GetCount())
     return false;
@@ -62,29 +61,25 @@ extern "C" DECL_EXP bool OCPNChartInspectorHitTestV4(
         attributes_size, primitive_type, marker_lat, marker_lon);
   }
 
-  // First use the exact user-configured radius. This keeps point/line picking
-  // tight and preserves the V3 behaviour.
   if (OCPNChartInspectorHitTestV3(
           canvas_index, lat, lon, radius_pixels, feature_filter, feature,
           feature_size, object_name, object_name_size, attributes,
           attributes_size, primitive_type, marker_lat, marker_lon)) {
     if (*primitive_type != 1) return true;
 
-    // A point has priority in V3. Keep it only when it is genuinely inside the
-    // configured radius; otherwise allow the area fallback below.
     const wxPoint object_point = viewport.GetPixFromLL(*marker_lat, *marker_lon);
     const double dx = static_cast<double>(object_point.x - calc_point.x);
     const double dy = static_cast<double>(object_point.y - calc_point.y);
-    if (std::sqrt(dx * dx + dy * dy) <= radius_pixels + 0.5) return true;
+    const double limit = radius_pixels + 0.5;
+    if (dx * dx + dy * dy <= limit * limit) return true;
   }
 
   if (!s_ppim) return false;
 
-  // Some vector chart plugins are more reliable for polygon selection with the
-  // same 16-pixel query radius traditionally used by OpenCPN's S-57 helpers.
-  // This wider query is ONLY used for areas, so it cannot make buoy/point hover
-  // feel loose.
-  const double area_radius_pixels = std::max(16.0, radius_pixels);
+  // Plugin-chart area fallback: OpenCPN traditionally uses a 16-pixel S-57
+  // query radius. Use that wider radius only for polygons; point picking stays
+  // at the user's configured radius above.
+  const double area_radius_pixels = radius_pixels > 16.0 ? radius_pixels : 16.0;
   const float area_select_radius = static_cast<float>(
       area_radius_pixels / (viewport.view_scale_ppm * 1852.0 * 60.0));
 
