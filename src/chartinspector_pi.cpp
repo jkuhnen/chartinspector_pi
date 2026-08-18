@@ -66,8 +66,8 @@ void ChartInspectorPi::UpdateHoverPopup(bool found) {
   wxWindow *canvas = GetOCPNCanvasWindow();
   if (!canvas) return;
 
-  if (!found) {
-    if (m_hoverPopup) m_hoverPopup->Hide();
+  if (!found || m_lastFeature.IsEmpty()) {
+    if (m_hoverPopup) m_hoverPopup->Show(false);
     return;
   }
 
@@ -75,9 +75,7 @@ void ChartInspectorPi::UpdateHoverPopup(bool found) {
     m_hoverPopup = new wxPopupWindow(canvas, wxBORDER_SIMPLE);
     wxPanel *panel = new wxPanel(m_hoverPopup, wxID_ANY);
     wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);
-    m_hoverText = new wxStaticText(panel, wxID_ANY, wxEmptyString,
-                                   wxDefaultPosition, wxDefaultSize,
-                                   wxST_NO_AUTORESIZE);
+    m_hoverText = new wxStaticText(panel, wxID_ANY, wxEmptyString);
     sizer->Add(m_hoverText, 0, wxALL, 6);
     panel->SetSizer(sizer);
     wxBoxSizer *popupSizer = new wxBoxSizer(wxVERTICAL);
@@ -94,7 +92,7 @@ void ChartInspectorPi::UpdateHoverPopup(bool found) {
 
   wxPoint pos = canvas->ClientToScreen(m_mousePosition + wxPoint(18, 18));
   m_hoverPopup->Move(pos);
-  m_hoverPopup->Show();
+  m_hoverPopup->Show(true);
   m_hoverPopup->Raise();
 }
 
