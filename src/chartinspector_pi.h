@@ -7,7 +7,6 @@
 #include "s57_catalog.h"
 
 class wxFileConfig;
-class wxFlexGridSizer;
 class wxPanel;
 class wxStaticText;
 
@@ -59,7 +58,6 @@ private:
   void SaveConfig();
   void ClearHover();
   bool IsFeatureEnabled(const wxString &feature) const;
-  bool FilterContainsToken(const wxString &token) const;
   void UpdateHoverObject();
   void BuildInfoPanel(wxWindow *canvas);
   void ShowObjectPopup();
@@ -83,7 +81,7 @@ private:
   wxStaticText *m_infoTitle = nullptr;
   wxStaticText *m_infoSubtitle = nullptr;
   wxStaticText *m_infoAcronym = nullptr;
-  wxFlexGridSizer *m_infoGrid = nullptr;
+  wxStaticText *m_infoBody = nullptr;
   wxStaticText *m_infoTechnical = nullptr;
 
   wxFileConfig *m_config = nullptr;
