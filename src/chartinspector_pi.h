@@ -33,6 +33,14 @@ public:
                                   int canvasIndex, int priority = -1) override;
 
 private:
+  using HitTestFn = bool (*)(int canvasIndex, double lat, double lon,
+                             double radiusPixels, char *feature,
+                             int featureSize, char *objectName,
+                             int objectNameSize, double *objectLat,
+                             double *objectLon);
+
+  void UpdateHoverObject();
+
   wxBitmap m_pluginBitmap;
   wxPoint m_mousePosition;
   double m_cursorLat = 0.0;
@@ -48,6 +56,8 @@ private:
   double m_lastObjectScale = 0.0;
   int m_lastObjectNativeScale = 0;
   bool m_hasVectorObject = false;
+
+  HitTestFn m_hitTest = nullptr;
 };
 
 #endif  // CHARTINSPECTOR_PI_H
