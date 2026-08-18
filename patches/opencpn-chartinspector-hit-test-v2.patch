@@ -1,0 +1,144 @@
+diff --git a/gui/src/ocpn_plugin_gui.cpp b/gui/src/ocpn_plugin_gui.cpp
+--- a/gui/src/ocpn_plugin_gui.cpp
++++ b/gui/src/ocpn_plugin_gui.cpp
+@@ -1,3 +1,4 @@
+ #include "quilt.h"
+ #include "s57chart.h"
++#include "ogr_s57.h"
+ #include "config_mgr.h"
+@@ -2,4 +2,125 @@
+   *object_lon = best_lon;
+   return true;
+ }
++
++namespace {
++
++template <typename TObject>
++wxString ChartInspectorFormatAttributes(TObject* obj) {
++  if (!obj || !obj->att_array || !obj->attVal || obj->n_attr <= 0)
++    return wxString();
++
++  wxString result;
++  const int count = wxMin(obj->n_attr, 24);
++  for (int i = 0; i < count; ++i) {
++    char acronym[7] = {0};
++    std::memcpy(acronym, obj->att_array + (6 * i), 6);
++
++    S57attVal* value = obj->attVal->Item(i);
++    if (!value || !value->value) continue;
++
++    wxString text;
++    switch (value->valType) {
++      case OGR_STR:
++        text = wxString::FromUTF8(static_cast<const char*>(value->value));
++        break;
++      case OGR_REAL:
++        text.Printf("%g", *static_cast<double*>(value->value));
++        break;
++      case OGR_INT:
++        text.Printf("%d", *static_cast<int*>(value->value));
++        break;
++      default:
++        continue;
++    }
++
++    if (!result.IsEmpty()) result += "\n";
++    result += wxString::FromUTF8(acronym) + "=" + text;
++  }
++  return result;
++}
++
++bool ChartInspectorSamePoint(double lat1, double lon1, double lat2,
++                             double lon2) {
++  double dlat = lat1 - lat2;
++  double dlon = lon1 - lon2;
++  if (dlat < 0.0) dlat = -dlat;
++  if (dlon < 0.0) dlon = -dlon;
++  return dlat < 1e-7 && dlon < 1e-7;
++}
++
++}  // namespace
++
++extern "C" DECL_EXP bool OCPNChartInspectorHitTestV2(
++    int canvas_index, double lat, double lon, double radius_pixels,
++    char* feature, int feature_size, char* object_name, int object_name_size,
++    char* attributes, int attributes_size, double* object_lat,
++    double* object_lon) {
++  if (!attributes || attributes_size <= 0) return false;
++  attributes[0] = '\0';
++
++  if (!OCPNChartInspectorHitTest(canvas_index, lat, lon, radius_pixels, feature,
++                                 feature_size, object_name, object_name_size,
++                                 object_lat, object_lon))
++    return false;
++
++  if (canvas_index < 0 ||
++      static_cast<size_t>(canvas_index) >= g_canvasArray.GetCount())
++    return true;
++
++  ChartCanvas* cc = g_canvasArray.Item(canvas_index);
++  if (!cc) return true;
++
++  ViewPort& viewport = cc->GetVP();
++  wxPoint calc_point = viewport.GetPixFromLL(lat, lon);
++  ChartBase* target_chart = nullptr;
++  if (cc->m_singleChart &&
++      cc->m_singleChart->GetChartFamily() == CHART_FAMILY_VECTOR) {
++    target_chart = cc->m_singleChart;
++  } else if (viewport.b_quilt && cc->m_pQuilt) {
++    target_chart = cc->m_pQuilt->GetChartAtPix(viewport, calc_point);
++  }
++  if (!target_chart) return true;
++
++  const float select_radius = static_cast<float>(
++      radius_pixels / (viewport.view_scale_ppm * 1852.0 * 60.0));
++  wxString attr_text;
++
++  if (auto* s57_chart = dynamic_cast<s57chart*>(target_chart)) {
++    ListOfObjRazRules* rules = s57_chart->GetObjRuleListAtLatLon(
++        static_cast<float>(lat), static_cast<float>(lon), select_radius,
++        &viewport, MASK_POINT);
++    if (rules) {
++      for (auto* node = rules->GetFirst(); node; node = node->GetNext()) {
++        ObjRazRules* rule = node->GetData();
++        if (!rule || !rule->obj) continue;
++        S57Obj* obj = rule->obj;
++        if (std::strcmp(obj->FeatureName, feature) == 0 &&
++            ChartInspectorSamePoint(obj->m_lat, obj->m_lon, *object_lat,
++                                    *object_lon)) {
++          attr_text = ChartInspectorFormatAttributes(obj);
++          break;
++        }
++      }
++      rules->Clear();
++      delete rules;
++    }
++  } else if (auto* plugin_chart =
++                 dynamic_cast<ChartPlugInWrapper*>(target_chart)) {
++    if (s_ppim) {
++      ListOfPI_S57Obj* objects = s_ppim->GetPlugInObjRuleListAtLatLon(
++          plugin_chart, static_cast<float>(lat), static_cast<float>(lon),
++          select_radius, viewport);
++      if (objects) {
++        for (auto* node = objects->GetFirst(); node; node = node->GetNext()) {
++          PI_S57Obj* obj = node->GetData();
++          if (!obj) continue;
++          if (std::strcmp(obj->FeatureName, feature) == 0 &&
++              ChartInspectorSamePoint(obj->m_lat, obj->m_lon, *object_lat,
++                                      *object_lon)) {
++            attr_text = ChartInspectorFormatAttributes(obj);
++            break;
++          }
++        }
++        objects->Clear();
++        delete objects;
++      }
++    }
++  }
++
++  const wxCharBuffer utf8 = attr_text.ToUTF8();
++  ChartInspectorCopyString(attributes, attributes_size, utf8.data());
++  return true;
++}
++
+ bool GetGlobalColor(wxString colorName, wxColour* pcolour) {
