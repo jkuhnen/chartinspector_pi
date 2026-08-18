@@ -26,6 +26,8 @@ public:
   void SetCursorLatLon(double lat, double lon) override;
   bool MouseEventHook(wxMouseEvent &event) override;
   bool RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp) override;
+  bool RenderGLOverlayMultiCanvas(wxGLContext *pcontext, PlugIn_ViewPort *vp,
+                                  int canvasIndex, int priority = -1) override;
 
 private:
   wxBitmap m_pluginBitmap;
