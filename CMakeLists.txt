@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(chartinspector VERSION 0.1.0.0 LANGUAGES CXX)
+project(chartinspector VERSION 0.1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,6 +9,7 @@ set(PACKAGE_VERSION "${PROJECT_VERSION}")
 set(OCPN_API_VERSION "1.18")
 
 find_package(wxWidgets REQUIRED COMPONENTS base core aui)
+find_package(OpenGL REQUIRED)
 include(${wxWidgets_USE_FILE})
 
 add_library(chartinspector_pi SHARED
@@ -21,7 +22,11 @@ target_include_directories(chartinspector_pi PRIVATE
 )
 
 add_subdirectory(opencpn-libs/api-18)
-target_link_libraries(chartinspector_pi PRIVATE ocpn::api ${wxWidgets_LIBRARIES})
+target_link_libraries(chartinspector_pi PRIVATE
+    ocpn::api
+    ${wxWidgets_LIBRARIES}
+    OpenGL::GL
+)
 
 if(WIN32)
   add_subdirectory(opencpn-libs/WindowsHeaders)
