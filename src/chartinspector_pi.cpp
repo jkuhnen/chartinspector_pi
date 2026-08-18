@@ -76,7 +76,7 @@ bool ChartInspectorPi::DeInit() {
 int ChartInspectorPi::GetAPIVersionMajor() { return 1; }
 int ChartInspectorPi::GetAPIVersionMinor() { return 18; }
 int ChartInspectorPi::GetPlugInVersionMajor() { return 0; }
-int ChartInspectorPi::GetPlugInVersionMinor() { return 3; }
+int ChartInspectorPi::GetPlugInVersionMinor() { return 4; }
 int ChartInspectorPi::GetToolbarToolCount() { return 1; }
 
 wxBitmap *ChartInspectorPi::GetPlugInBitmap() { return &m_pluginBitmap; }
@@ -138,7 +138,8 @@ void ChartInspectorPi::ApplyInfoTheme() {
 
   if (m_infoVisual) {
     const wxWindowList &children = m_infoVisual->GetChildren();
-    for (wxWindowList::const_iterator it = children.begin(); it != children.end(); ++it) {
+    for (wxWindowList::const_iterator it = children.begin();
+         it != children.end(); ++it) {
       wxWindow *child = *it;
       if (!child || child == m_lightIndicator) continue;
       if (dynamic_cast<wxStaticText *>(child)) {
@@ -198,6 +199,8 @@ void ChartInspectorPi::ClearHover() {
   m_lastFeature.clear();
   m_lastObjectName.clear();
   m_lastAttributes.clear();
+  m_associatedLightAttributes.clear();
+  m_hasAssociatedLight = false;
   m_lastPrimitiveType = 1;
 }
 
@@ -247,11 +250,11 @@ wxColour ChartInspectorPi::SignalColour(const wxString &value) const {
                   static_cast<unsigned char>(c.Blue() * factor));
 }
 
-wxString ChartInspectorPi::BuildLightSummary() const {
-  const wxString chr = m_s57Catalog.RawAttributeValue(m_lastAttributes, "LITCHR");
-  const wxString grp = m_s57Catalog.RawAttributeValue(m_lastAttributes, "SIGGRP");
-  const wxString col = m_s57Catalog.RawAttributeValue(m_lastAttributes, "COLOUR");
-  const wxString per = m_s57Catalog.RawAttributeValue(m_lastAttributes, "SIGPER");
+wxString ChartInspectorPi::BuildLightSummary(const wxString &attributes) const {
+  const wxString chr = m_s57Catalog.RawAttributeValue(attributes, "LITCHR");
+  const wxString grp = m_s57Catalog.RawAttributeValue(attributes, "SIGGRP");
+  const wxString col = m_s57Catalog.RawAttributeValue(attributes, "COLOUR");
+  const wxString per = m_s57Catalog.RawAttributeValue(attributes, "SIGPER");
 
   long c = 0;
   chr.ToLong(&c);
@@ -273,9 +276,7 @@ wxString ChartInspectorPi::BuildLightSummary() const {
     case 14: abbr = "Fl.LFl"; break;
     case 28: abbr = "Al"; break;
     case 29: abbr = "F.Al.Fl"; break;
-    default:
-      abbr = m_s57Catalog.DecodeValue("LITCHR", chr);
-      break;
+    default: abbr = m_s57Catalog.DecodeValue("LITCHR", chr); break;
   }
   if (!grp.IsEmpty() && grp != "()" && grp != "(1)") abbr += grp;
 
@@ -311,7 +312,8 @@ void ChartInspectorPi::UpdateLightIndicator() {
   if (!m_lightIndicator) return;
   bool on = true;
   if (!m_lightIsFixed && m_lightPeriodSeconds > 0.05) {
-    const long long periodMs = static_cast<long long>(m_lightPeriodSeconds * 1000.0);
+    const long long periodMs =
+        static_cast<long long>(m_lightPeriodSeconds * 1000.0);
     const long long nowMs = wxGetUTCTimeMillis().GetValue();
     const double phase = static_cast<double>(nowMs % periodMs) / periodMs;
     const int flashes = std::max(1, m_lightGroupCount);
@@ -365,18 +367,26 @@ void ChartInspectorPi::BuildVisualSummary() {
     sizer->Add(row, 0, wxBOTTOM, 8);
   }
 
-  if (m_lastFeature == "LIGHTS") {
+  wxString lightAttributes;
+  if (m_lastFeature == "LIGHTS")
+    lightAttributes = m_lastAttributes;
+  else if (m_hasAssociatedLight)
+    lightAttributes = m_associatedLightAttributes;
+
+  if (!lightAttributes.IsEmpty()) {
+    const wxString lightColourRaw =
+        m_s57Catalog.RawAttributeValue(lightAttributes, "COLOUR");
     wxBoxSizer *lightRow = new wxBoxSizer(wxHORIZONTAL);
-    m_lightColour = SignalColour(colourRaw);
+    m_lightColour = SignalColour(lightColourRaw);
     m_lightIndicator = new wxPanel(m_infoVisual, wxID_ANY, wxDefaultPosition,
                                    wxSize(34, 34), wxBORDER_NONE);
     m_lightIndicator->SetMinSize(wxSize(34, 34));
     m_lightIndicator->Bind(wxEVT_PAINT, [this](wxPaintEvent &) {
       if (!m_lightIndicator) return;
       wxPaintDC dc(m_lightIndicator);
-      wxColour background = m_infoVisual
-                                ? m_infoVisual->GetBackgroundColour()
-                                : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
+      wxColour background =
+          m_infoVisual ? m_infoVisual->GetBackgroundColour()
+                       : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
       dc.SetBackground(wxBrush(background));
       dc.Clear();
       dc.SetPen(wxPen(m_lightColour, 2));
@@ -386,8 +396,11 @@ void ChartInspectorPi::BuildVisualSummary() {
     lightRow->Add(m_lightIndicator, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
 
     wxBoxSizer *text = new wxBoxSizer(wxVERTICAL);
+    const wxString lightHeading =
+        m_lastFeature == "LIGHTS" ? BuildLightSummary(lightAttributes)
+                                  : "Light  " + BuildLightSummary(lightAttributes);
     wxStaticText *character =
-        new wxStaticText(m_infoVisual, wxID_ANY, BuildLightSummary());
+        new wxStaticText(m_infoVisual, wxID_ANY, lightHeading);
     wxFont cf = character->GetFont();
     cf.SetWeight(wxFONTWEIGHT_BOLD);
     cf.SetPointSize(cf.GetPointSize() + 2);
@@ -401,13 +414,14 @@ void ChartInspectorPi::BuildVisualSummary() {
     sizer->Add(lightRow, 0, wxEXPAND | wxBOTTOM, 8);
 
     long chr = 0;
-    m_s57Catalog.RawAttributeValue(m_lastAttributes, "LITCHR").ToLong(&chr);
+    m_s57Catalog.RawAttributeValue(lightAttributes, "LITCHR").ToLong(&chr);
     m_lightIsFixed = chr == 1;
     m_lightPeriodSeconds = 0.0;
-    m_s57Catalog.RawAttributeValue(m_lastAttributes, "SIGPER")
+    m_s57Catalog.RawAttributeValue(lightAttributes, "SIGPER")
         .ToDouble(&m_lightPeriodSeconds);
     m_lightGroupCount = 1;
-    wxString group = m_s57Catalog.RawAttributeValue(m_lastAttributes, "SIGGRP");
+    wxString group =
+        m_s57Catalog.RawAttributeValue(lightAttributes, "SIGGRP");
     group.Replace("(", "");
     group.Replace(")", "");
     long groupCount = 1;
@@ -449,7 +463,8 @@ void ChartInspectorPi::BuildInfoPanel(wxWindow *canvas) {
   wxButton *close = new wxButton(m_infoPanel, wxID_ANY, "x",
                                  wxDefaultPosition, wxSize(28, 26), wxBU_EXACTFIT);
   close->SetToolTip("Close object information");
-  close->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) { HideObjectPopup(); });
+  close->Bind(wxEVT_BUTTON,
+              [this](wxCommandEvent &) { HideObjectPopup(); });
   header->Add(close, 0, wxLEFT, 8);
   root->Add(header, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 12);
 
@@ -514,6 +529,13 @@ void ChartInspectorPi::ShowObjectPopup() {
   if (m_showTechnicalData) {
     wxString raw = "Technical S-57 data\n" + m_lastFeature;
     if (!technical.IsEmpty()) raw += "\n" + technical;
+    if (m_hasAssociatedLight) {
+      wxString lightTechnical;
+      m_s57Catalog.FormatAttributes(m_associatedLightAttributes,
+                                    &lightTechnical);
+      raw += "\n\nAssociated LIGHTS";
+      if (!lightTechnical.IsEmpty()) raw += "\n" + lightTechnical;
+    }
     m_infoTechnical->SetLabel(raw);
     m_infoTechnical->Wrap(360);
     m_infoTechnical->Show();
@@ -536,6 +558,37 @@ void ChartInspectorPi::ShowObjectPopup() {
   m_infoPanel->Move(x, 14);
   m_infoPanel->Show();
   m_infoPanel->Raise();
+}
+
+void ChartInspectorPi::QueryAssociatedLight() {
+  m_associatedLightAttributes.clear();
+  m_hasAssociatedLight = false;
+
+  if (!(m_lastFeature.StartsWith("BOY") || m_lastFeature.StartsWith("BCN")))
+    return;
+  HitTestV3Fn query = m_hitTestV4 ? m_hitTestV4 : m_hitTestV3;
+  if (!query) return;
+
+  char feature[32] = {0};
+  char objectName[128] = {0};
+  char attributes[2048] = {0};
+  int primitiveType = 1;
+  double markerLat = 0.0;
+  double markerLon = 0.0;
+  const char *lightFilter = "LIGHTS";
+  const double radius = static_cast<double>(std::max(8, m_hitRadiusPixels));
+
+  const bool found = query(
+      0, m_lastObjectLat, m_lastObjectLon, radius, lightFilter, feature,
+      static_cast<int>(sizeof(feature)), objectName,
+      static_cast<int>(sizeof(objectName)), attributes,
+      static_cast<int>(sizeof(attributes)), &primitiveType, &markerLat,
+      &markerLon);
+
+  if (found && wxString::FromUTF8(feature).Upper() == "LIGHTS") {
+    m_associatedLightAttributes = wxString::FromUTF8(attributes);
+    m_hasAssociatedLight = !m_associatedLightAttributes.IsEmpty();
+  }
 }
 
 void ChartInspectorPi::UpdateHoverObject() {
@@ -593,6 +646,7 @@ void ChartInspectorPi::UpdateHoverObject() {
     m_lastObjectLat = markerLat;
     m_lastObjectLon = markerLon;
     m_lastPrimitiveType = primitiveType;
+    QueryAssociatedLight();
   } else {
     ClearHover();
   }
@@ -670,14 +724,16 @@ void ChartInspectorPi::ShowPreferencesDialog(wxWindow *parent) {
       &dialog, wxID_ANY, wxDefaultPosition, wxSize(580, 330));
   std::vector<wxString> classAcronyms;
   for (const auto &info : m_s57Catalog.ObjectClasses()) {
-    const unsigned int index = classes->Append(info.acronym + "  -  " + info.name);
+    const unsigned int index =
+        classes->Append(info.acronym + "  -  " + info.name);
     classes->Check(index, IsFeatureEnabled(info.acronym));
     classAcronyms.push_back(info.acronym);
   }
   objects->Add(classes, 1, wxEXPAND | wxLEFT | wxRIGHT, 8);
 
   wxBoxSizer *classButtons = new wxBoxSizer(wxHORIZONTAL);
-  wxButton *defaults = new wxButton(&dialog, wxID_ANY, "Navigation defaults");
+  wxButton *defaults =
+      new wxButton(&dialog, wxID_ANY, "Navigation defaults");
   wxButton *all = new wxButton(&dialog, wxID_ANY, "Select all");
   wxButton *none = new wxButton(&dialog, wxID_ANY, "Clear all");
   classButtons->Add(defaults, 0, wxRIGHT, 6);
@@ -695,10 +751,12 @@ void ChartInspectorPi::ShowPreferencesDialog(wxWindow *parent) {
     }
   });
   all->Bind(wxEVT_BUTTON, [classes](wxCommandEvent &) {
-    for (unsigned int i = 0; i < classes->GetCount(); ++i) classes->Check(i, true);
+    for (unsigned int i = 0; i < classes->GetCount(); ++i)
+      classes->Check(i, true);
   });
   none->Bind(wxEVT_BUTTON, [classes](wxCommandEvent &) {
-    for (unsigned int i = 0; i < classes->GetCount(); ++i) classes->Check(i, false);
+    for (unsigned int i = 0; i < classes->GetCount(); ++i)
+      classes->Check(i, false);
   });
 
   root->Add(objects, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
