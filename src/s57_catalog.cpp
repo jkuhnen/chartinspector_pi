@@ -42,6 +42,30 @@ std::vector<S57Catalog::ObjectClassInfo> S57Catalog::ObjectClasses() const {
   return result;
 }
 
+wxString S57Catalog::RawAttributeValue(const wxString &rawAttributes,
+                                       const wxString &acronym) const {
+  const wxString wanted = acronym.Upper();
+  wxStringTokenizer lines(rawAttributes, "\n", wxTOKEN_STRTOK);
+  while (lines.HasMoreTokens()) {
+    const wxString line = Trimmed(lines.GetNextToken());
+    const int equals = line.Find('=');
+    if (equals == wxNOT_FOUND) continue;
+    if (Trimmed(line.Left(equals)).Upper() == wanted)
+      return Trimmed(line.Mid(equals + 1));
+  }
+  return wxEmptyString;
+}
+
+wxString S57Catalog::DecodeValue(const wxString &acronym,
+                                 const wxString &rawValue) const {
+  if (acronym.Upper() == "CATGEO") {
+    if (rawValue == "1") return "Point";
+    if (rawValue == "2") return "Line";
+    if (rawValue == "3") return "Area";
+  }
+  return DecodeAttributeValue(acronym.Upper(), rawValue, nullptr);
+}
+
 wxString S57Catalog::FormatAttributes(const wxString &rawAttributes,
                                       wxString *technical) const {
   wxString result;
@@ -59,8 +83,6 @@ wxString S57Catalog::FormatAttributes(const wxString &rawAttributes,
 
     const wxString acronym = Trimmed(line.Left(equals)).Upper();
     const wxString rawValue = Trimmed(line.Mid(equals + 1));
-
-    // Renderer/private metadata is technical data, not user-facing chart data.
     if (acronym.StartsWith("$")) continue;
 
     wxString catalogLabel = acronym;
@@ -72,10 +94,7 @@ wxString S57Catalog::FormatAttributes(const wxString &rawAttributes,
     bool decodedAny = false;
     bool malformedDate = false;
     if (acronym == "CATGEO") {
-      if (rawValue == "1") decoded = "Point";
-      else if (rawValue == "2") decoded = "Line";
-      else if (rawValue == "3") decoded = "Area";
-      else decoded = rawValue;
+      decoded = DecodeValue(acronym, rawValue);
       decodedAny = decoded != rawValue;
     } else if (acronym == "DATSTA" || acronym == "DATEND" ||
                acronym == "PERSTA" || acronym == "PEREND" ||
@@ -87,8 +106,6 @@ wxString S57Catalog::FormatAttributes(const wxString &rawAttributes,
       decoded = DecodeAttributeValue(acronym, rawValue, &decodedAny);
     }
 
-    // Unknown fields and malformed dates belong only in the optional
-    // technical block. Never present them as if they were decoded values.
     if (malformedDate || (!decodedAny && attr == m_attributes.end())) continue;
 
     const wxString label = FriendlyLabel(acronym, catalogLabel);
