@@ -9,6 +9,7 @@
 class wxFileConfig;
 class wxPanel;
 class wxStaticText;
+class wxTimer;
 
 class ChartInspectorPi : public opencpn_plugin_118 {
 public:
@@ -30,6 +31,7 @@ public:
   wxString GetLongDescription() override;
 
   void SetCursorLatLon(double lat, double lon) override;
+  void SetColorScheme(PI_ColorScheme cs) override;
   bool MouseEventHook(wxMouseEvent &event) override;
   void OnToolbarToolCallback(int id) override;
   void ShowPreferencesDialog(wxWindow *parent) override;
@@ -52,18 +54,32 @@ private:
                                int objectNameSize, char *attributes,
                                int attributesSize, double *objectLat,
                                double *objectLon);
+  using HitTestV3Fn = bool (*)(int canvasIndex, double lat, double lon,
+                               double radiusPixels, const char *featureFilter,
+                               char *feature, int featureSize, char *objectName,
+                               int objectNameSize, char *attributes,
+                               int attributesSize, int *primitiveType,
+                               double *markerLat, double *markerLon);
 
-  void BuildToolbarBitmap();
+  void BuildToolbarBitmaps();
+  void UpdateToolbarVisual();
   void LoadConfig();
   void SaveConfig();
   void ClearHover();
   bool IsFeatureEnabled(const wxString &feature) const;
   void UpdateHoverObject();
   void BuildInfoPanel(wxWindow *canvas);
+  void BuildVisualSummary();
+  void UpdateLightIndicator();
+  void StopLightPreview();
   void ShowObjectPopup();
   void HideObjectPopup();
+  wxColour SignalColour(const wxString &value) const;
+  wxString BuildLightSummary() const;
 
   wxBitmap m_pluginBitmap;
+  wxBitmap m_toolbarEnabledBitmap;
+  wxBitmap m_toolbarDisabledBitmap;
   wxPoint m_mousePosition;
   double m_cursorLat = 0.0;
   double m_cursorLon = 0.0;
@@ -75,14 +91,23 @@ private:
   wxString m_lastAttributes;
   double m_lastObjectLat = 0.0;
   double m_lastObjectLon = 0.0;
+  int m_lastPrimitiveType = 1;  // 1 point, 2 line, 3 area
   bool m_hasVectorObject = false;
 
   wxPanel *m_infoPanel = nullptr;
   wxStaticText *m_infoTitle = nullptr;
   wxStaticText *m_infoSubtitle = nullptr;
   wxStaticText *m_infoAcronym = nullptr;
+  wxPanel *m_infoVisual = nullptr;
   wxStaticText *m_infoBody = nullptr;
   wxStaticText *m_infoTechnical = nullptr;
+  wxStaticText *m_lightIndicator = nullptr;
+  wxTimer *m_lightTimer = nullptr;
+  wxColour m_lightColour;
+  double m_lightPeriodSeconds = 0.0;
+  int m_lightGroupCount = 1;
+  double m_lightDutyCycle = 0.22;
+  bool m_lightIsFixed = false;
 
   wxFileConfig *m_config = nullptr;
   int m_toolbarId = -1;
@@ -90,10 +115,12 @@ private:
   bool m_showTechnicalData = false;
   int m_hitRadiusPixels = 5;
   wxString m_featureFilter = "BOY*,BCN*,LIGHTS,WRECKS,UWTROC,OBSTRN";
+  PI_ColorScheme m_colorScheme = PI_GLOBAL_COLOR_SCHEME_DAY;
 
   S57Catalog m_s57Catalog;
   HitTestFn m_hitTest = nullptr;
   HitTestV2Fn m_hitTestV2 = nullptr;
+  HitTestV3Fn m_hitTestV3 = nullptr;
 };
 
 #endif  // CHARTINSPECTOR_PI_H
