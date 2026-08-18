@@ -1,7 +1,11 @@
 diff --git a/gui/src/ocpn_plugin_gui.cpp b/gui/src/ocpn_plugin_gui.cpp
 --- a/gui/src/ocpn_plugin_gui.cpp
 +++ b/gui/src/ocpn_plugin_gui.cpp
-@@ -537,4 +537,176 @@
+@@ -34,2 +34,3 @@
+ #include <wx/string.h>
++#include <wx/tokenzr.h>
+ #include <wx/window.h>
+@@ -537,4 +538,176 @@
    ChartInspectorCopyString(attributes, attributes_size, utf8.data());
    return true;
  }
@@ -166,9 +170,6 @@ diff --git a/gui/src/ocpn_plugin_gui.cpp b/gui/src/ocpn_plugin_gui.cpp
 +  ChartInspectorCopyString(attributes, attributes_size, attrs_utf8.data());
 +  *primitive_type = best_primitive;
 +
-+  // Point objects are highlighted at their object position in V1/V2. For
-+  // lines and areas the hit location is the useful marker position and avoids
-+  // jumping to the object's internal reference point.
 +  if (best_primitive == 1) {
 +    double point_lat = lat;
 +    double point_lon = lon;
