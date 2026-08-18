@@ -1,0 +1,174 @@
+diff --git a/gui/src/ocpn_plugin_gui.cpp b/gui/src/ocpn_plugin_gui.cpp
+index 000000000..111111111 100644
+--- a/gui/src/ocpn_plugin_gui.cpp
++++ b/gui/src/ocpn_plugin_gui.cpp
+@@ -16,6 +16,7 @@
+  */
+ #include <vector>
++#include <cstring>
+ #include "dychart.h"  // Must be ahead due to buggy GL includes handling
+ 
+ #include <wx/wx.h>
+@@ -47,6 +48,9 @@
+ #include "ais.h"
++#include "chartbase.h"
+ #include "chartdb.h"
+ #include "chcanv.h"
++#include "quilt.h"
++#include "s57chart.h"
+ #include "config_mgr.h"
+ #include "font_mgr.h"
+ #include "gl_chart_canvas.h"
+@@ -170,6 +174,119 @@ void GetCanvasLLPix(PlugIn_ViewPort* vp, wxPoint p, double* plat,
+   return ocpn_vp.GetLLFromPix(p, plat, plon);
+ }
+ 
++namespace {
++
++int ChartInspectorFeaturePriority(const char* feature) {
++  if (!feature || !feature[0]) return 0;
++
++  // Initial Chart Inspector scope: aids to navigation first.
++  if (!std::strncmp(feature, "BOY", 3) || !std::strncmp(feature, "BCN", 3))
++    return 300;
++  if (!std::strcmp(feature, "LIGHTS")) return 250;
++
++  // Useful safety-related point objects for the next iteration.
++  if (!std::strcmp(feature, "WRECKS") || !std::strcmp(feature, "UWTROC") ||
++      !std::strcmp(feature, "OBSTRN"))
++    return 200;
++
++  return 100;
++}
++
++void ChartInspectorCopyString(char* dst, int dst_size, const char* src) {
++  if (!dst || dst_size <= 0) return;
++  dst[0] = '\0';
++  if (!src) return;
++  std::strncpy(dst, src, static_cast<size_t>(dst_size - 1));
++  dst[dst_size - 1] = '\0';
++}
++
++}  // namespace
++
++// Experimental, read-only vector chart hit-test used by Chart Inspector.
++//
++// This deliberately exposes only copied feature metadata and coordinates. It
++// does not expose chart-provider internals, object pointers or decrypted chart
++// data. Both native S-57 and vector charts supplied by plugins use OpenCPN's
++// existing selection paths.
++extern "C" DECL_EXP bool OCPNChartInspectorHitTest(
++    int canvas_index, double lat, double lon, double radius_pixels,
++    char* feature, int feature_size, char* object_name, int object_name_size,
++    double* object_lat, double* object_lon) {
++  if (!feature || feature_size <= 0 || !object_name || object_name_size <= 0 ||
++      !object_lat || !object_lon)
++    return false;
++
++  feature[0] = '\0';
++  object_name[0] = '\0';
++
++  if (canvas_index < 0 ||
++      static_cast<size_t>(canvas_index) >= g_canvasArray.GetCount())
++    return false;
++
++  ChartCanvas* cc = g_canvasArray.Item(canvas_index);
++  if (!cc) return false;
++
++  ViewPort& viewport = cc->GetVP();
++  if (!viewport.bValid || viewport.view_scale_ppm <= 0.0) return false;
++
++  wxPoint calc_point = viewport.GetPixFromLL(lat, lon);
++  ChartBase* target_chart = nullptr;
++
++  if (cc->m_singleChart &&
++      cc->m_singleChart->GetChartFamily() == CHART_FAMILY_VECTOR) {
++    target_chart = cc->m_singleChart;
++  } else if (viewport.b_quilt && cc->m_pQuilt) {
++    target_chart = cc->m_pQuilt->GetChartAtPix(viewport, calc_point);
++  }
++
++  if (!target_chart || target_chart->GetChartFamily() != CHART_FAMILY_VECTOR)
++    return false;
++
++  auto* plugin_chart = dynamic_cast<ChartPlugInWrapper*>(target_chart);
++  auto* s57_chart = dynamic_cast<s57chart*>(target_chart);
++  if (!plugin_chart && !s57_chart) return false;
++
++  const float select_radius = static_cast<float>(
++      radius_pixels / (viewport.view_scale_ppm * 1852.0 * 60.0));
++  if (select_radius <= 0.0f) return false;
++
++  int best_priority = -1;
++  double best_lat = 0.0;
++  double best_lon = 0.0;
++  char best_feature[32] = {0};
++  char best_name[128] = {0};
++
++  if (s57_chart) {
++    ListOfObjRazRules* rules = s57_chart->GetObjRuleListAtLatLon(
++        static_cast<float>(lat), static_cast<float>(lon), select_radius,
++        &viewport, MASK_POINT);
++
++    if (rules) {
++      for (auto* node = rules->GetFirst(); node; node = node->GetNext()) {
++        ObjRazRules* rule = node->GetData();
++        if (!rule || !rule->obj) continue;
++
++        S57Obj* obj = rule->obj;
++        const int priority = ChartInspectorFeaturePriority(obj->FeatureName);
++        if (priority <= best_priority) continue;
++
++        best_priority = priority;
++        best_lat = obj->m_lat;
++        best_lon = obj->m_lon;
++        ChartInspectorCopyString(best_feature, sizeof(best_feature),
++                                 obj->FeatureName);
++
++        wxString name = obj->GetAttrValueAsString("OBJNAM");
++        if (name.IsEmpty()) name = obj->GetAttrValueAsString("NOBJNM");
++        const wxCharBuffer utf8 = name.ToUTF8();
++        ChartInspectorCopyString(best_name, sizeof(best_name), utf8.data());
++      }
++
++      rules->Clear();
++      delete rules;
++    }
++  } else if (plugin_chart && s_ppim) {
++    ListOfPI_S57Obj* objects = s_ppim->GetPlugInObjRuleListAtLatLon(
++        plugin_chart, static_cast<float>(lat), static_cast<float>(lon),
++        select_radius, viewport);
++
++    if (objects) {
++      for (auto* node = objects->GetFirst(); node; node = node->GetNext()) {
++        PI_S57Obj* obj = node->GetData();
++        if (!obj) continue;
++
++        const int priority = ChartInspectorFeaturePriority(obj->FeatureName);
++        if (priority <= best_priority) continue;
++
++        best_priority = priority;
++        best_lat = obj->m_lat;
++        best_lon = obj->m_lon;
++        ChartInspectorCopyString(best_feature, sizeof(best_feature),
++                                 obj->FeatureName);
++        best_name[0] = '\0';
++      }
++
++      objects->Clear();
++      delete objects;
++    }
++  }
++
++  if (best_priority < 0) return false;
++
++  ChartInspectorCopyString(feature, feature_size, best_feature);
++  ChartInspectorCopyString(object_name, object_name_size, best_name);
++  *object_lat = best_lat;
++  *object_lon = best_lon;
++  return true;
++}
++
+ bool GetGlobalColor(wxString colorName, wxColour* pcolour) {
+   wxColour c = GetGlobalColor(colorName);
+   *pcolour = c;
