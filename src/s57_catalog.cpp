@@ -27,8 +27,6 @@ bool S57Catalog::Load(const wxString &sharedDataDirectory) {
   const bool decodesOk = LoadAttributeDecodes(JoinPath(base, "attdecode.csv"));
   const bool expectedOk = LoadExpectedInput(JoinPath(base, "s57expectedinput.csv"));
 
-  // attdecode is useful but s57expectedinput is the authoritative fallback
-  // for enum values which are missing from attdecode in some installations.
   m_loaded = objectsOk && attributesOk && (decodesOk || expectedOk);
   return m_loaded;
 }
@@ -53,18 +51,17 @@ wxString S57Catalog::FormatAttributes(const wxString &rawAttributes,
     wxString line = Trimmed(lines.GetNextToken());
     if (line.IsEmpty()) continue;
 
+    if (!raw.IsEmpty()) raw += "\n";
+    raw += line;
+
     const int equals = line.Find('=');
     if (equals == wxNOT_FOUND) continue;
 
     const wxString acronym = Trimmed(line.Left(equals)).Upper();
     const wxString rawValue = Trimmed(line.Mid(equals + 1));
 
-    // Technical renderer metadata is deliberately hidden from the readable UI.
-    if (acronym.StartsWith("$")) {
-      if (!raw.IsEmpty()) raw += "\n";
-      raw += line;
-      continue;
-    }
+    // Renderer/private metadata is technical data, not user-facing chart data.
+    if (acronym.StartsWith("$")) continue;
 
     wxString catalogLabel = acronym;
     auto attr = m_attributes.find(acronym);
@@ -73,6 +70,7 @@ wxString S57Catalog::FormatAttributes(const wxString &rawAttributes,
 
     wxString decoded;
     bool decodedAny = false;
+    bool malformedDate = false;
     if (acronym == "CATGEO") {
       if (rawValue == "1") decoded = "Point";
       else if (rawValue == "2") decoded = "Line";
@@ -84,26 +82,18 @@ wxString S57Catalog::FormatAttributes(const wxString &rawAttributes,
                acronym == "RECDAT" || acronym == "SORDAT") {
       decoded = FormatDate(rawValue);
       decodedAny = decoded != rawValue;
+      malformedDate = !decodedAny;
     } else {
       decoded = DecodeAttributeValue(acronym, rawValue, &decodedAny);
     }
 
-    // Keep undecoded raw metadata out of the primary readable view.
-    // It remains available in the technical block.
-    if (!decodedAny && attr == m_attributes.end()) {
-      if (!raw.IsEmpty()) raw += "\n";
-      raw += line;
-      continue;
-    }
+    // Unknown fields and malformed dates belong only in the optional
+    // technical block. Never present them as if they were decoded values.
+    if (malformedDate || (!decodedAny && attr == m_attributes.end())) continue;
 
     const wxString label = FriendlyLabel(acronym, catalogLabel);
     if (!result.IsEmpty()) result += "\n";
     result += label + ": " + decoded;
-
-    if (!decodedAny) {
-      if (!raw.IsEmpty()) raw += "\n";
-      raw += line;
-    }
   }
 
   if (technical) *technical = raw;
@@ -158,8 +148,6 @@ wxString S57Catalog::FriendlyLabel(const wxString &acronym,
 }
 
 wxString S57Catalog::FormatDate(const wxString &value) {
-  // Valid S-57 dates are YYYYMMDD; incomplete or malformed values are better
-  // kept as technical data than presented as a misleading date.
   if (value.length() != 8) return value;
   long year = 0, month = 0, day = 0;
   if (!value.Left(4).ToLong(&year) || !value.Mid(4, 2).ToLong(&month) ||
