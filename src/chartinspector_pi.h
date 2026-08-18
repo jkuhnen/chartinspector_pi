@@ -6,6 +6,7 @@
 #include "ocpn_plugin.h"
 #include "s57_catalog.h"
 
+class wxFileConfig;
 class wxPopupWindow;
 
 class ChartInspectorPi : public opencpn_plugin_118 {
@@ -20,6 +21,7 @@ public:
   int GetAPIVersionMinor() override;
   int GetPlugInVersionMajor() override;
   int GetPlugInVersionMinor() override;
+  int GetToolbarToolCount() override;
 
   wxBitmap *GetPlugInBitmap() override;
   wxString GetCommonName() override;
@@ -28,6 +30,8 @@ public:
 
   void SetCursorLatLon(double lat, double lon) override;
   bool MouseEventHook(wxMouseEvent &event) override;
+  void OnToolbarToolCallback(int id) override;
+  void ShowPreferencesDialog(wxWindow *parent) override;
   void SendVectorChartObjectInfo(wxString &chart, wxString &feature,
                                  wxString &objname, double lat, double lon,
                                  double scale, int nativescale) override;
@@ -48,8 +52,14 @@ private:
                                int attributesSize, double *objectLat,
                                double *objectLon);
 
+  void BuildToolbarBitmap();
+  void LoadConfig();
+  void SaveConfig();
+  void ClearHover();
+  bool IsFeatureEnabled(const wxString &feature) const;
   void UpdateHoverObject();
-  void UpdateHoverPopup(bool found);
+  void ShowObjectPopup();
+  void HideObjectPopup();
 
   wxBitmap m_pluginBitmap;
   wxPoint m_mousePosition;
@@ -58,18 +68,22 @@ private:
   bool m_hasMousePosition = false;
   bool m_hasCursorPosition = false;
 
-  wxString m_lastChart;
   wxString m_lastFeature;
   wxString m_lastObjectName;
   wxString m_lastAttributes;
   double m_lastObjectLat = 0.0;
   double m_lastObjectLon = 0.0;
-  double m_lastObjectScale = 0.0;
-  int m_lastObjectNativeScale = 0;
   bool m_hasVectorObject = false;
 
   wxPopupWindow *m_hoverPopup = nullptr;
   wxStaticText *m_hoverText = nullptr;
+
+  wxFileConfig *m_config = nullptr;
+  int m_toolbarId = -1;
+  bool m_enabled = true;
+  bool m_showTechnicalData = false;
+  int m_hitRadiusPixels = 7;
+  wxString m_featureFilter = "BOY*,BCN*,LIGHTS,WRECKS,UWTROC,OBSTRN";
 
   S57Catalog m_s57Catalog;
   HitTestFn m_hitTest = nullptr;
