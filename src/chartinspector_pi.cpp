@@ -25,7 +25,7 @@ int ChartInspectorPi::GetPlugInVersionMajor() { return 0; }
 
 int ChartInspectorPi::GetPlugInVersionMinor() { return 1; }
 
-wxBitmap *ChartInspectorPi::GetPlugInBitmap() { return nullptr; }
+wxBitmap *ChartInspectorPi::GetPlugInBitmap() { return &m_pluginBitmap; }
 
 wxString ChartInspectorPi::GetCommonName() { return "Chart Inspector"; }
 
