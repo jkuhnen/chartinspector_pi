@@ -12,12 +12,12 @@ foreach(PATH "${SHIM}" "${IMPL}")
   endif()
 endforeach()
 
-# The first installer run already added the public declarations to
-# include/ocpn_plugin.h before failing. The default implementation for chart
-# provider extension classes lives in cli/api_shim.cpp, just like Plus2.
+# An earlier repair version installed the Plus3 defaults in cli/api_shim.cpp.
+# That source is not linked into the normal OpenCPN GUI executable on Windows,
+# so remove that stale block if present. The native installer below will place
+# the implementation in gui/src/ocpn_plugin_gui.cpp, which is part of opencpn.
 file(READ "${SHIM}" S)
-if(NOT S MATCHES "PlugInChartBaseGLPlus3::PlugInChartBaseGLPlus3")
-  set(PLUS3_IMPL [===[
+set(OLD_PLUS3_IMPL [===[
 
 // ----------------------------------------------------------------------------
 // PlugInChartBaseGLPlus3
@@ -36,30 +36,24 @@ bool PlugInChartBaseGLPlus3::QueryVectorObjectsV1(
 }
 
 ]===])
-
-  string(FIND "${S}" "PlugInChartBaseGLPlus2::PlugInChartBaseGLPlus2" POS)
-  if(POS EQUAL -1)
-    message(FATAL_ERROR "Could not locate PlugInChartBaseGLPlus2 implementation in ${SHIM}")
-  endif()
-  string(SUBSTRING "${S}" 0 ${POS} PREFIX)
-  string(SUBSTRING "${S}" ${POS} -1 SUFFIX)
-  set(S "${PREFIX}${PLUS3_IMPL}${SUFFIX}")
+string(FIND "${S}" "${OLD_PLUS3_IMPL}" OLD_POS)
+if(NOT OLD_POS EQUAL -1)
+  string(REPLACE "${OLD_PLUS3_IMPL}" "" S "${S}")
   file(WRITE "${SHIM}" "${S}")
-  message(STATUS "Installed PlugInChartBaseGLPlus3 default implementation in ${SHIM}")
-else()
-  message(STATUS "PlugInChartBaseGLPlus3 default implementation already present.")
+  message(STATUS "Removed stale PlugInChartBaseGLPlus3 implementation from ${SHIM}")
 endif()
 
-# The original installer checks for this implementation in ocpn_plugin_gui.cpp.
-# Add an explicit location marker so the repaired run skips that obsolete
-# anchor check and continues with the native S-57 query implementation.
+# Remove the obsolete marker used by the previous workaround. It fooled the
+# native installer into thinking the Plus3 methods were already implemented in
+# ocpn_plugin_gui.cpp, which produced unresolved externals at link time.
 file(READ "${IMPL}" C)
-set(MARKER "// PlugInChartBaseGLPlus3::PlugInChartBaseGLPlus3 is implemented in cli/api_shim.cpp")
-string(FIND "${C}" "${MARKER}" MARKER_POS)
-if(MARKER_POS EQUAL -1)
-  string(REPLACE "#include <vector>" "#include <vector>\n${MARKER}" C "${C}")
-  file(WRITE "${IMPL}" "${C}")
-  message(STATUS "Installed Plus3 implementation-location marker in ${IMPL}")
-endif()
+set(OLD_MARKER "// PlugInChartBaseGLPlus3::PlugInChartBaseGLPlus3 is implemented in cli/api_shim.cpp")
+string(REPLACE "${OLD_MARKER}\n" "" C "${C}")
+string(REPLACE "${OLD_MARKER}\r\n" "" C "${C}")
+file(WRITE "${IMPL}" "${C}")
+message(STATUS "Prepared ${IMPL} for native Plus3 implementation")
 
+# Re-run the native installer. It now sees no fake Plus3 marker and installs
+# constructor, destructor and QueryVectorObjectsV1 into the GUI target source,
+# together with the native S-57 vector query implementation.
 include("${CMAKE_CURRENT_LIST_DIR}/apply-vector-query-api-v1-native.cmake")
