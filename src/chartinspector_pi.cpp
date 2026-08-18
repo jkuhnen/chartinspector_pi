@@ -4,6 +4,7 @@
 #include <windows.h>
 #endif
 #include <GL/gl.h>
+#include <wx/popupwin.h>
 
 extern "C" DECL_EXP opencpn_plugin *create_pi(void *ppimgr) {
   return new ChartInspectorPi(ppimgr);
@@ -30,7 +31,14 @@ int ChartInspectorPi::Init() {
          WANTS_OPENGL_OVERLAY_CALLBACK | WANTS_VECTOR_CHART_OBJECT_INFO;
 }
 
-bool ChartInspectorPi::DeInit() { return true; }
+bool ChartInspectorPi::DeInit() {
+  if (m_hoverPopup) {
+    m_hoverPopup->Destroy();
+    m_hoverPopup = nullptr;
+    m_hoverText = nullptr;
+  }
+  return true;
+}
 
 int ChartInspectorPi::GetAPIVersionMajor() { return 1; }
 int ChartInspectorPi::GetAPIVersionMinor() { return 18; }
@@ -52,6 +60,42 @@ void ChartInspectorPi::SetCursorLatLon(double lat, double lon) {
   m_cursorLat = lat;
   m_cursorLon = lon;
   m_hasCursorPosition = true;
+}
+
+void ChartInspectorPi::UpdateHoverPopup(bool found) {
+  wxWindow *canvas = GetOCPNCanvasWindow();
+  if (!canvas) return;
+
+  if (!found) {
+    if (m_hoverPopup) m_hoverPopup->Hide();
+    return;
+  }
+
+  if (!m_hoverPopup) {
+    m_hoverPopup = new wxPopupWindow(canvas, wxBORDER_SIMPLE);
+    wxPanel *panel = new wxPanel(m_hoverPopup, wxID_ANY);
+    wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);
+    m_hoverText = new wxStaticText(panel, wxID_ANY, wxEmptyString,
+                                   wxDefaultPosition, wxDefaultSize,
+                                   wxST_NO_AUTORESIZE);
+    sizer->Add(m_hoverText, 0, wxALL, 6);
+    panel->SetSizer(sizer);
+    wxBoxSizer *popupSizer = new wxBoxSizer(wxVERTICAL);
+    popupSizer->Add(panel, 1, wxEXPAND);
+    m_hoverPopup->SetSizer(popupSizer);
+  }
+
+  wxString text = m_lastFeature;
+  if (!m_lastObjectName.IsEmpty()) text += " | " + m_lastObjectName;
+  if (!m_lastAttributes.IsEmpty()) text += "\n" + m_lastAttributes;
+  m_hoverText->SetLabel(text);
+  m_hoverText->Wrap(340);
+  m_hoverPopup->Fit();
+
+  wxPoint pos = canvas->ClientToScreen(m_mousePosition + wxPoint(18, 18));
+  m_hoverPopup->Move(pos);
+  m_hoverPopup->Show();
+  m_hoverPopup->Raise();
 }
 
 void ChartInspectorPi::UpdateHoverObject() {
@@ -90,17 +134,7 @@ void ChartInspectorPi::UpdateHoverObject() {
     m_lastAttributes.clear();
   }
 
-  wxWindow *canvas = GetOCPNCanvasWindow();
-  if (canvas) {
-    if (found) {
-      wxString tooltip = m_lastFeature;
-      if (!m_lastObjectName.IsEmpty()) tooltip += " | " + m_lastObjectName;
-      if (!m_lastAttributes.IsEmpty()) tooltip += "\n" + m_lastAttributes;
-      canvas->SetToolTip(tooltip);
-    } else {
-      canvas->UnsetToolTip();
-    }
-  }
+  UpdateHoverPopup(found);
 }
 
 bool ChartInspectorPi::MouseEventHook(wxMouseEvent &event) {
@@ -117,7 +151,6 @@ bool ChartInspectorPi::MouseEventHook(wxMouseEvent &event) {
 void ChartInspectorPi::SendVectorChartObjectInfo(
     wxString &chart, wxString &feature, wxString &objname, double lat,
     double lon, double scale, int nativescale) {
-  // Keep legacy callback support for compatibility with unmodified OpenCPN.
   m_lastChart = chart;
   m_lastFeature = feature;
   m_lastObjectName = objname;
