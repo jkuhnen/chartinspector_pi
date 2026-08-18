@@ -5,6 +5,8 @@
 
 #include "ocpn_plugin.h"
 
+class wxPopupWindow;
+
 class ChartInspectorPi : public opencpn_plugin_118 {
 public:
   explicit ChartInspectorPi(void *ppimgr);
@@ -46,6 +48,7 @@ private:
                                double *objectLon);
 
   void UpdateHoverObject();
+  void UpdateHoverPopup(bool found);
 
   wxBitmap m_pluginBitmap;
   wxPoint m_mousePosition;
@@ -63,6 +66,9 @@ private:
   double m_lastObjectScale = 0.0;
   int m_lastObjectNativeScale = 0;
   bool m_hasVectorObject = false;
+
+  wxPopupWindow *m_hoverPopup = nullptr;
+  wxStaticText *m_hoverText = nullptr;
 
   HitTestFn m_hitTest = nullptr;
   HitTestV2Fn m_hitTestV2 = nullptr;
