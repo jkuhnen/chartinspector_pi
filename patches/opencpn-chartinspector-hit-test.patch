@@ -60,7 +60,7 @@ diff --git a/gui/src/ocpn_plugin_gui.cpp b/gui/src/ocpn_plugin_gui.cpp
 +  if (!cc) return false;
 +
 +  ViewPort& viewport = cc->GetVP();
-+  if (!viewport.bValid || viewport.view_scale_ppm <= 0.0) return false;
++  if (!viewport.IsValid() || viewport.view_scale_ppm <= 0.0) return false;
 +
 +  wxPoint calc_point = viewport.GetPixFromLL(lat, lon);
 +  ChartBase* target_chart = nullptr;
