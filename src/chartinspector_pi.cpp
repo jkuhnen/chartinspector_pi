@@ -76,7 +76,7 @@ bool ChartInspectorPi::DeInit() {
 int ChartInspectorPi::GetAPIVersionMajor() { return 1; }
 int ChartInspectorPi::GetAPIVersionMinor() { return 18; }
 int ChartInspectorPi::GetPlugInVersionMajor() { return 0; }
-int ChartInspectorPi::GetPlugInVersionMinor() { return 4; }
+int ChartInspectorPi::GetPlugInVersionMinor() { return 5; }
 int ChartInspectorPi::GetToolbarToolCount() { return 1; }
 
 wxBitmap *ChartInspectorPi::GetPlugInBitmap() { return &m_pluginBitmap; }
@@ -387,8 +387,19 @@ void ChartInspectorPi::BuildVisualSummary() {
       wxColour background =
           m_infoVisual ? m_infoVisual->GetBackgroundColour()
                        : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
+      wxColour contrast =
+          wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
+      GetGlobalColor("DILG4", &contrast);
       dc.SetBackground(wxBrush(background));
       dc.Clear();
+
+      // Always draw a theme-aware contrast ring outside the signal colour.
+      // This keeps white/yellow lights visible on bright day backgrounds and
+      // dark lights visible in night mode without changing the actual colour.
+      dc.SetPen(wxPen(contrast, 2));
+      dc.SetBrush(*wxTRANSPARENT_BRUSH);
+      dc.DrawCircle(wxPoint(17, 17), 11);
+
       dc.SetPen(wxPen(m_lightColour, 2));
       dc.SetBrush(m_lightOn ? wxBrush(m_lightColour) : *wxTRANSPARENT_BRUSH);
       dc.DrawCircle(wxPoint(17, 17), 9);
