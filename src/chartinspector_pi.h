@@ -69,6 +69,7 @@ private:
   void ClearHover();
   bool IsFeatureEnabled(const wxString &feature) const;
   void UpdateHoverObject();
+  void QueryAssociatedLight();
   void BuildInfoPanel(wxWindow *canvas);
   void BuildVisualSummary();
   void UpdateLightIndicator();
@@ -76,7 +77,7 @@ private:
   void ShowObjectPopup();
   void HideObjectPopup();
   wxColour SignalColour(const wxString &value) const;
-  wxString BuildLightSummary() const;
+  wxString BuildLightSummary(const wxString &attributes) const;
 
   wxBitmap m_pluginBitmap;
   wxBitmap m_toolbarEnabledBitmap;
@@ -90,10 +91,12 @@ private:
   wxString m_lastFeature;
   wxString m_lastObjectName;
   wxString m_lastAttributes;
+  wxString m_associatedLightAttributes;
   double m_lastObjectLat = 0.0;
   double m_lastObjectLon = 0.0;
   int m_lastPrimitiveType = 1;  // 1 point, 2 line, 3 area
   bool m_hasVectorObject = false;
+  bool m_hasAssociatedLight = false;
 
   wxPanel *m_infoPanel = nullptr;
   wxStaticText *m_infoTitle = nullptr;
