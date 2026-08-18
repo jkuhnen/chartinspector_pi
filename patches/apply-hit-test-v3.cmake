@@ -1,0 +1,240 @@
+if(NOT DEFINED OPENCPN_ROOT)
+  message(FATAL_ERROR "OPENCPN_ROOT is required, e.g. -DOPENCPN_ROOT=C:/Users/Johannes/source/OpenCPN")
+endif()
+
+file(TO_CMAKE_PATH "${OPENCPN_ROOT}" OPENCPN_ROOT)
+set(TARGET "${OPENCPN_ROOT}/gui/src/ocpn_plugin_gui.cpp")
+
+if(NOT EXISTS "${TARGET}")
+  message(FATAL_ERROR "OpenCPN source file not found: ${TARGET}")
+endif()
+
+file(READ "${TARGET}" SRC)
+
+if(SRC MATCHES "OCPNChartInspectorHitTestV3")
+  message(STATUS "Chart Inspector V3 hit test is already installed.")
+  return()
+endif()
+
+if(NOT SRC MATCHES "OCPNChartInspectorHitTestV2")
+  message(FATAL_ERROR "V2 hit test was not found. Apply/build the existing V1+V2 core changes first.")
+endif()
+
+if(NOT SRC MATCHES "ChartInspectorFormatAttributes")
+  message(FATAL_ERROR "ChartInspectorFormatAttributes helper was not found in the OpenCPN core source.")
+endif()
+
+# V3 uses wxStringTokenizer for the feature filter.
+if(NOT SRC MATCHES "#include <wx/tokenzr.h>")
+  string(FIND "${SRC}" "#include <wx/string.h>" POS_STRING_INCLUDE)
+  if(POS_STRING_INCLUDE EQUAL -1)
+    message(FATAL_ERROR "Could not find #include <wx/string.h> anchor.")
+  endif()
+  string(REPLACE "#include <wx/string.h>" "#include <wx/string.h>\n#include <wx/tokenzr.h>" SRC "${SRC}")
+endif()
+
+set(V3_CODE [===[
+
+namespace {
+
+bool ChartInspectorFilterMatch(const char* filter, const char* feature) {
+  if (!feature || !feature[0]) return false;
+  if (!filter || !filter[0]) return true;
+
+  const wxString candidate = wxString::FromUTF8(feature).Upper();
+  wxStringTokenizer tokens(wxString::FromUTF8(filter), ",; \t\r\n",
+                           wxTOKEN_STRTOK);
+  while (tokens.HasMoreTokens()) {
+    wxString token = tokens.GetNextToken().Upper();
+    token.Trim(true);
+    token.Trim(false);
+    if (token.IsEmpty()) continue;
+    if (token.EndsWith("*")) {
+      token.RemoveLast();
+      if (!token.IsEmpty() && candidate.StartsWith(token)) return true;
+    } else if (candidate == token) {
+      return true;
+    }
+  }
+  return false;
+}
+
+int ChartInspectorPrimitiveType(int primitive_type) {
+  if (primitive_type == GEO_AREA) return 3;
+  if (primitive_type == GEO_LINE) return 2;
+  return 1;
+}
+
+int ChartInspectorV3Priority(const char* feature, int primitive_type) {
+  int base = 100;
+  if (primitive_type == GEO_POINT)
+    base = 300;
+  else if (primitive_type == GEO_LINE)
+    base = 200;
+
+  if (!feature) return base;
+  if (!std::strncmp(feature, "BOY", 3) || !std::strncmp(feature, "BCN", 3))
+    return base + 50;
+  if (!std::strcmp(feature, "LIGHTS")) return base + 40;
+  if (!std::strcmp(feature, "WRECKS") || !std::strcmp(feature, "UWTROC") ||
+      !std::strcmp(feature, "OBSTRN"))
+    return base + 30;
+  return base;
+}
+
+}  // namespace
+
+extern "C" DECL_EXP bool OCPNChartInspectorHitTestV3(
+    int canvas_index, double lat, double lon, double radius_pixels,
+    const char* feature_filter, char* feature, int feature_size,
+    char* object_name, int object_name_size, char* attributes,
+    int attributes_size, int* primitive_type, double* marker_lat,
+    double* marker_lon) {
+  if (!feature || feature_size <= 0 || !object_name || object_name_size <= 0 ||
+      !attributes || attributes_size <= 0 || !primitive_type || !marker_lat ||
+      !marker_lon)
+    return false;
+
+  feature[0] = '\0';
+  object_name[0] = '\0';
+  attributes[0] = '\0';
+  *primitive_type = 1;
+
+  if (canvas_index < 0 ||
+      static_cast<size_t>(canvas_index) >= g_canvasArray.GetCount())
+    return false;
+
+  ChartCanvas* cc = g_canvasArray.Item(canvas_index);
+  if (!cc) return false;
+
+  ViewPort& viewport = cc->GetVP();
+  if (!viewport.IsValid() || viewport.view_scale_ppm <= 0.0) return false;
+
+  const wxPoint calc_point = viewport.GetPixFromLL(lat, lon);
+  ChartBase* target_chart = nullptr;
+  if (cc->m_singleChart &&
+      cc->m_singleChart->GetChartFamily() == CHART_FAMILY_VECTOR) {
+    target_chart = cc->m_singleChart;
+  } else if (viewport.b_quilt && cc->m_pQuilt) {
+    target_chart = cc->m_pQuilt->GetChartAtPix(viewport, calc_point);
+  }
+  if (!target_chart || target_chart->GetChartFamily() != CHART_FAMILY_VECTOR)
+    return false;
+
+  const float select_radius = static_cast<float>(
+      radius_pixels / (viewport.view_scale_ppm * 1852.0 * 60.0));
+  if (select_radius <= 0.0f) return false;
+
+  int best_priority = -1;
+  int best_primitive = 1;
+  char best_feature[32] = {0};
+  char best_name[128] = {0};
+  wxString best_attributes;
+
+  if (auto* s57_chart = dynamic_cast<s57chart*>(target_chart)) {
+    ListOfObjRazRules* rules = s57_chart->GetObjRuleListAtLatLon(
+        static_cast<float>(lat), static_cast<float>(lon), select_radius,
+        &viewport, MASK_ALL);
+    if (rules) {
+      for (auto* node = rules->GetFirst(); node; node = node->GetNext()) {
+        ObjRazRules* rule = node->GetData();
+        if (!rule || !rule->obj) continue;
+        S57Obj* obj = rule->obj;
+        if (!ChartInspectorFilterMatch(feature_filter, obj->FeatureName))
+          continue;
+
+        const int priority =
+            ChartInspectorV3Priority(obj->FeatureName, obj->Primitive_type);
+        if (priority <= best_priority) continue;
+
+        best_priority = priority;
+        best_primitive = ChartInspectorPrimitiveType(obj->Primitive_type);
+        ChartInspectorCopyString(best_feature, sizeof(best_feature),
+                                 obj->FeatureName);
+        wxString name = obj->GetAttrValueAsString("OBJNAM");
+        if (name.IsEmpty()) name = obj->GetAttrValueAsString("NOBJNM");
+        const wxCharBuffer name_utf8 = name.ToUTF8();
+        ChartInspectorCopyString(best_name, sizeof(best_name), name_utf8.data());
+        best_attributes = ChartInspectorFormatAttributes(obj);
+      }
+      rules->Clear();
+      delete rules;
+    }
+  } else if (auto* plugin_chart =
+                 dynamic_cast<ChartPlugInWrapper*>(target_chart)) {
+    if (s_ppim) {
+      ListOfPI_S57Obj* objects = s_ppim->GetPlugInObjRuleListAtLatLon(
+          plugin_chart, static_cast<float>(lat), static_cast<float>(lon),
+          select_radius, viewport);
+      if (objects) {
+        for (auto* node = objects->GetFirst(); node; node = node->GetNext()) {
+          PI_S57Obj* obj = node->GetData();
+          if (!obj ||
+              !ChartInspectorFilterMatch(feature_filter, obj->FeatureName))
+            continue;
+
+          const int priority =
+              ChartInspectorV3Priority(obj->FeatureName, obj->Primitive_type);
+          if (priority <= best_priority) continue;
+
+          best_priority = priority;
+          best_primitive = ChartInspectorPrimitiveType(obj->Primitive_type);
+          ChartInspectorCopyString(best_feature, sizeof(best_feature),
+                                   obj->FeatureName);
+          best_name[0] = '\0';
+          best_attributes = ChartInspectorFormatAttributes(obj);
+        }
+        objects->Clear();
+        delete objects;
+      }
+    }
+  }
+
+  if (best_priority < 0) return false;
+
+  ChartInspectorCopyString(feature, feature_size, best_feature);
+  ChartInspectorCopyString(object_name, object_name_size, best_name);
+  const wxCharBuffer attrs_utf8 = best_attributes.ToUTF8();
+  ChartInspectorCopyString(attributes, attributes_size, attrs_utf8.data());
+  *primitive_type = best_primitive;
+
+  // For line/area objects the cursor hit location is the useful marker.
+  // For point objects keep using the exact object position when V1 returns
+  // the same selected feature.
+  if (best_primitive == 1) {
+    double point_lat = lat;
+    double point_lon = lon;
+    char ignored_feature[32] = {0};
+    char ignored_name[128] = {0};
+    if (OCPNChartInspectorHitTest(canvas_index, lat, lon, radius_pixels,
+                                  ignored_feature, sizeof(ignored_feature),
+                                  ignored_name, sizeof(ignored_name),
+                                  &point_lat, &point_lon) &&
+        !std::strcmp(ignored_feature, best_feature)) {
+      *marker_lat = point_lat;
+      *marker_lon = point_lon;
+    } else {
+      *marker_lat = lat;
+      *marker_lon = lon;
+    }
+  } else {
+    *marker_lat = lat;
+    *marker_lon = lon;
+  }
+
+  return true;
+}
+]===])
+
+string(FIND "${SRC}" "bool GetGlobalColor(wxString colorName, wxColour* pcolour)" POS_GLOBAL_COLOR)
+if(POS_GLOBAL_COLOR EQUAL -1)
+  message(FATAL_ERROR "Could not find GetGlobalColor anchor in ${TARGET}")
+endif()
+
+string(REPLACE
+  "bool GetGlobalColor(wxString colorName, wxColour* pcolour)"
+  "${V3_CODE}\nbool GetGlobalColor(wxString colorName, wxColour* pcolour)"
+  SRC "${SRC}")
+
+file(WRITE "${TARGET}" "${SRC}")
+message(STATUS "Installed Chart Inspector V3 hit test in ${TARGET}")
