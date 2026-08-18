@@ -16,6 +16,14 @@ extern "C" DECL_EXP void destroy_pi(opencpn_plugin *plugin) {
 ChartInspectorPi::ChartInspectorPi(void *ppimgr) : opencpn_plugin_118(ppimgr) {}
 
 int ChartInspectorPi::Init() {
+#ifdef _WIN32
+  HMODULE host = GetModuleHandleW(nullptr);
+  if (host) {
+    m_hitTest = reinterpret_cast<HitTestFn>(
+        GetProcAddress(host, "OCPNChartInspectorHitTest"));
+  }
+#endif
+
   return WANTS_MOUSE_EVENTS | WANTS_CURSOR_LATLON | WANTS_OVERLAY_CALLBACK |
          WANTS_OPENGL_OVERLAY_CALLBACK | WANTS_VECTOR_CHART_OBJECT_INFO;
 }
@@ -44,9 +52,48 @@ void ChartInspectorPi::SetCursorLatLon(double lat, double lon) {
   m_hasCursorPosition = true;
 }
 
+void ChartInspectorPi::UpdateHoverObject() {
+  if (!m_hitTest || !m_hasCursorPosition) return;
+
+  char feature[32] = {0};
+  char objectName[128] = {0};
+  double objectLat = 0.0;
+  double objectLon = 0.0;
+
+  const bool found = m_hitTest(0, m_cursorLat, m_cursorLon, 18.0, feature,
+                               static_cast<int>(sizeof(feature)), objectName,
+                               static_cast<int>(sizeof(objectName)), &objectLat,
+                               &objectLon);
+
+  m_hasVectorObject = found;
+  if (found) {
+    m_lastFeature = wxString::FromUTF8(feature);
+    m_lastObjectName = wxString::FromUTF8(objectName);
+    m_lastObjectLat = objectLat;
+    m_lastObjectLon = objectLon;
+  } else {
+    m_lastFeature.clear();
+    m_lastObjectName.clear();
+  }
+
+  wxWindow *canvas = GetOCPNCanvasWindow();
+  if (canvas) {
+    if (found) {
+      wxString tooltip = m_lastFeature;
+      if (!m_lastObjectName.IsEmpty()) tooltip += " | " + m_lastObjectName;
+      canvas->SetToolTip(tooltip);
+    } else {
+      canvas->UnsetToolTip();
+    }
+  }
+}
+
 bool ChartInspectorPi::MouseEventHook(wxMouseEvent &event) {
   m_mousePosition = event.GetPosition();
   m_hasMousePosition = true;
+
+  UpdateHoverObject();
+
   wxWindow *canvas = GetOCPNCanvasWindow();
   if (canvas) RequestRefresh(canvas);
   return false;
@@ -55,6 +102,7 @@ bool ChartInspectorPi::MouseEventHook(wxMouseEvent &event) {
 void ChartInspectorPi::SendVectorChartObjectInfo(
     wxString &chart, wxString &feature, wxString &objname, double lat,
     double lon, double scale, int nativescale) {
+  // Keep legacy callback support for compatibility with unmodified OpenCPN.
   m_lastChart = chart;
   m_lastFeature = feature;
   m_lastObjectName = objname;
@@ -63,12 +111,6 @@ void ChartInspectorPi::SendVectorChartObjectInfo(
   m_lastObjectScale = scale;
   m_lastObjectNativeScale = nativescale;
   m_hasVectorObject = true;
-
-  wxWindow *canvas = GetOCPNCanvasWindow();
-  if (canvas) {
-    canvas->SetToolTip(wxString::Format("%s | %s", m_lastFeature, m_lastObjectName));
-    RequestRefresh(canvas);
-  }
 }
 
 bool ChartInspectorPi::RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp) {
@@ -93,8 +135,9 @@ bool ChartInspectorPi::RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp) {
     dc.SetPen(wxPen(wxColour(0, 255, 255), 3));
     dc.DrawCircle(p, 14);
     dc.SetTextForeground(wxColour(0, 255, 255));
-    dc.DrawText(wxString::Format("%s | %s", m_lastFeature, m_lastObjectName),
-                wxPoint(p.x + 18, p.y + 10));
+    wxString label = m_lastFeature;
+    if (!m_lastObjectName.IsEmpty()) label += " | " + m_lastObjectName;
+    dc.DrawText(label, wxPoint(p.x + 18, p.y + 10));
   }
 
   return true;
