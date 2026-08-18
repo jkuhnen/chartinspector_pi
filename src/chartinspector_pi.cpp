@@ -23,21 +23,15 @@ int ChartInspectorPi::Init() {
 bool ChartInspectorPi::DeInit() { return true; }
 
 int ChartInspectorPi::GetAPIVersionMajor() { return 1; }
-
 int ChartInspectorPi::GetAPIVersionMinor() { return 18; }
-
 int ChartInspectorPi::GetPlugInVersionMajor() { return 0; }
-
 int ChartInspectorPi::GetPlugInVersionMinor() { return 1; }
 
 wxBitmap *ChartInspectorPi::GetPlugInBitmap() { return &m_pluginBitmap; }
-
 wxString ChartInspectorPi::GetCommonName() { return "Chart Inspector"; }
-
 wxString ChartInspectorPi::GetShortDescription() {
   return "Interactive inspection of vector chart objects.";
 }
-
 wxString ChartInspectorPi::GetLongDescription() {
   return "Chart Inspector adds direct interaction with vector chart features, "
          "including hover highlighting, object selection and quick access to "
@@ -53,35 +47,55 @@ void ChartInspectorPi::SetCursorLatLon(double lat, double lon) {
 bool ChartInspectorPi::MouseEventHook(wxMouseEvent &event) {
   m_mousePosition = event.GetPosition();
   m_hasMousePosition = true;
-
   wxWindow *canvas = GetOCPNCanvasWindow();
   if (canvas) RequestRefresh(canvas);
-
   return false;
+}
+
+void ChartInspectorPi::SendVectorChartObjectInfo(
+    wxString &chart, wxString &feature, wxString &objname, double lat,
+    double lon, double scale, int nativescale) {
+  m_lastChart = chart;
+  m_lastFeature = feature;
+  m_lastObjectName = objname;
+  m_lastObjectLat = lat;
+  m_lastObjectLon = lon;
+  m_lastObjectScale = scale;
+  m_lastObjectNativeScale = nativescale;
+  m_hasVectorObject = true;
+
+  wxWindow *canvas = GetOCPNCanvasWindow();
+  if (canvas) {
+    canvas->SetToolTip(wxString::Format("%s | %s", m_lastFeature, m_lastObjectName));
+    RequestRefresh(canvas);
+  }
 }
 
 bool ChartInspectorPi::RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp) {
   if (!vp) return false;
 
-  // Fixed diagnostic marker proves that the non-OpenGL overlay callback runs.
   dc.SetBrush(*wxTRANSPARENT_BRUSH);
   dc.SetPen(wxPen(wxColour(255, 0, 255), 3));
   dc.DrawRectangle(18, 18, 24, 24);
   dc.DrawText("CI", wxPoint(48, 20));
 
-  if (!m_hasMousePosition || !m_hasCursorPosition) return true;
+  if (m_hasMousePosition) {
+    const int x = m_mousePosition.x;
+    const int y = m_mousePosition.y;
+    dc.SetPen(wxPen(wxColour(255, 0, 255), 2));
+    dc.DrawLine(x - 14, y, x + 14, y);
+    dc.DrawLine(x, y - 14, x, y + 14);
+  }
 
-  const int x = m_mousePosition.x;
-  const int y = m_mousePosition.y;
-
-  dc.SetPen(wxPen(wxColour(255, 0, 255), 2));
-  dc.DrawCircle(x, y, 8);
-  dc.DrawLine(x - 14, y, x + 14, y);
-  dc.DrawLine(x, y - 14, x, y + 14);
-
-  const wxString label = wxString::Format("%.5f, %.5f", m_cursorLat, m_cursorLon);
-  dc.SetTextForeground(wxColour(255, 0, 255));
-  dc.DrawText(label, wxPoint(x + 16, y + 12));
+  if (m_hasVectorObject) {
+    wxPoint p;
+    GetCanvasPixLL(vp, &p, m_lastObjectLat, m_lastObjectLon);
+    dc.SetPen(wxPen(wxColour(0, 255, 255), 3));
+    dc.DrawCircle(p, 14);
+    dc.SetTextForeground(wxColour(0, 255, 255));
+    dc.DrawText(wxString::Format("%s | %s", m_lastFeature, m_lastObjectName),
+                wxPoint(p.x + 18, p.y + 10));
+  }
 
   return true;
 }
@@ -92,13 +106,11 @@ bool ChartInspectorPi::RenderGLOverlayMultiCanvas(wxGLContext *pcontext,
                                                    int priority) {
   (void)pcontext;
   (void)canvasIndex;
-
   if (!vp) return false;
   if (priority != -1 && priority != OVERLAY_LEGACY) return false;
 
   glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_LINE_BIT |
                GL_TRANSFORM_BIT | GL_VIEWPORT_BIT | GL_CURRENT_BIT);
-
   glDisable(GL_TEXTURE_2D);
   glDisable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
@@ -116,8 +128,6 @@ bool ChartInspectorPi::RenderGLOverlayMultiCanvas(wxGLContext *pcontext,
 
   glColor4f(1.0f, 0.0f, 1.0f, 1.0f);
   glLineWidth(3.0f);
-
-  // Fixed top-left diagnostic box.
   glBegin(GL_LINE_LOOP);
   glVertex2f(18.0f, 18.0f);
   glVertex2f(42.0f, 18.0f);
@@ -128,7 +138,6 @@ bool ChartInspectorPi::RenderGLOverlayMultiCanvas(wxGLContext *pcontext,
   if (m_hasMousePosition) {
     const float x = static_cast<float>(m_mousePosition.x);
     const float y = static_cast<float>(m_mousePosition.y);
-
     glLineWidth(2.0f);
     glBegin(GL_LINES);
     glVertex2f(x - 14.0f, y);
@@ -138,11 +147,26 @@ bool ChartInspectorPi::RenderGLOverlayMultiCanvas(wxGLContext *pcontext,
     glEnd();
   }
 
+  if (m_hasVectorObject) {
+    wxPoint p;
+    GetCanvasPixLL(vp, &p, m_lastObjectLat, m_lastObjectLon);
+    const float cx = static_cast<float>(p.x);
+    const float cy = static_cast<float>(p.y);
+    const float r = 14.0f;
+    glColor4f(0.0f, 1.0f, 1.0f, 1.0f);
+    glLineWidth(3.0f);
+    glBegin(GL_LINE_LOOP);
+    for (int i = 0; i < 32; ++i) {
+      const float a = static_cast<float>(i) * 6.28318530718f / 32.0f;
+      glVertex2f(cx + r * cosf(a), cy + r * sinf(a));
+    }
+    glEnd();
+  }
+
   glPopMatrix();
   glMatrixMode(GL_PROJECTION);
   glPopMatrix();
   glMatrixMode(GL_MODELVIEW);
   glPopAttrib();
-
   return true;
 }
