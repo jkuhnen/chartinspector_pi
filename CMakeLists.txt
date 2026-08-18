@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(chartinspector VERSION 0.1.5.0 LANGUAGES CXX)
+project(chartinspector VERSION 0.1.6.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,6 +15,8 @@ include(${wxWidgets_USE_FILE})
 add_library(chartinspector_pi SHARED
     src/chartinspector_pi.cpp
     src/chartinspector_pi.h
+    src/s57_catalog.cpp
+    src/s57_catalog.h
 )
 
 target_include_directories(chartinspector_pi PRIVATE
