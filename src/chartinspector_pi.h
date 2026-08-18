@@ -28,6 +28,7 @@ public:
   bool RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp) override;
 
 private:
+  wxBitmap m_pluginBitmap;
   double m_cursorLat = 0.0;
   double m_cursorLon = 0.0;
   bool m_hasCursorPosition = false;
