@@ -10,6 +10,7 @@
 
 #include <GL/gl.h>
 #include <wx/checklst.h>
+#include <wx/dcbuffer.h>
 #include <wx/dcclient.h>
 #include <wx/fileconf.h>
 #include <wx/spinctrl.h>
@@ -76,7 +77,7 @@ bool ChartInspectorPi::DeInit() {
 int ChartInspectorPi::GetAPIVersionMajor() { return 1; }
 int ChartInspectorPi::GetAPIVersionMinor() { return 18; }
 int ChartInspectorPi::GetPlugInVersionMajor() { return 0; }
-int ChartInspectorPi::GetPlugInVersionMinor() { return 6; }
+int ChartInspectorPi::GetPlugInVersionMinor() { return 7; }
 int ChartInspectorPi::GetToolbarToolCount() { return 1; }
 
 wxBitmap *ChartInspectorPi::GetPlugInBitmap() { return &m_pluginBitmap; }
@@ -310,23 +311,38 @@ void ChartInspectorPi::StopLightPreview() {
 
 void ChartInspectorPi::UpdateLightIndicator() {
   if (!m_lightIndicator) return;
+
   bool on = true;
   if (!m_lightIsFixed && m_lightPeriodSeconds > 0.05) {
     const long long periodMs =
         static_cast<long long>(m_lightPeriodSeconds * 1000.0);
     const long long nowMs = wxGetUTCTimeMillis().GetValue();
     const double phase = static_cast<double>(nowMs % periodMs) / periodMs;
-    const int flashes = std::max(1, m_lightGroupCount);
-    const double activeWindow = 0.62;
-    if (phase >= activeWindow) {
-      on = false;
+
+    if (m_lightCharacteristic == 7) {
+      // Isophase: equal light and dark intervals.
+      on = phase < 0.5;
+    } else if (m_lightCharacteristic == 8) {
+      // Occulting: light interval is clearly longer than the eclipse.
+      on = phase < 0.75;
+    } else if (m_lightCharacteristic == 4 || m_lightCharacteristic == 5 ||
+               m_lightCharacteristic == 6) {
+      // Continuous Q/VQ/UQ: a repeated short flash at the standard cadence.
+      on = phase < 0.35;
     } else {
-      const double local = std::fmod(phase * flashes / activeWindow, 1.0);
-      on = local < m_lightDutyCycle;
+      const int flashes = std::max(1, m_lightGroupCount);
+      const double activeWindow = 0.62;
+      if (phase >= activeWindow) {
+        on = false;
+      } else {
+        const double local = std::fmod(phase * flashes / activeWindow, 1.0);
+        on = local < 0.22;
+      }
     }
   }
+
   m_lightOn = on;
-  m_lightIndicator->Refresh();
+  m_lightIndicator->Refresh(false);
 }
 
 void ChartInspectorPi::BuildVisualSummary() {
@@ -379,36 +395,33 @@ void ChartInspectorPi::BuildVisualSummary() {
     wxBoxSizer *lightRow = new wxBoxSizer(wxHORIZONTAL);
     m_lightColour = SignalColour(lightColourRaw);
     m_lightIndicator = new wxPanel(m_infoVisual, wxID_ANY, wxDefaultPosition,
-                                   wxSize(34, 34), wxBORDER_NONE);
-    m_lightIndicator->SetMinSize(wxSize(34, 34));
+                                   wxSize(30, 30), wxBORDER_NONE);
+    m_lightIndicator->SetMinSize(wxSize(30, 30));
+    m_lightIndicator->SetBackgroundStyle(wxBG_STYLE_PAINT);
     m_lightIndicator->Bind(wxEVT_PAINT, [this](wxPaintEvent &) {
       if (!m_lightIndicator) return;
-      wxPaintDC dc(m_lightIndicator);
+
+      wxAutoBufferedPaintDC dc(m_lightIndicator);
       wxColour background =
           m_infoVisual ? m_infoVisual->GetBackgroundColour()
                        : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
-      wxColour contrast =
-          wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
-      GetGlobalColor("DILG4", &contrast);
+      wxColour border = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
+      GetGlobalColor("DILG4", &border);
+
+      wxColour offColour(68, 68, 68);
+      if (m_colorScheme == PI_GLOBAL_COLOR_SCHEME_DUSK)
+        offColour = wxColour(58, 58, 58);
+      else if (m_colorScheme == PI_GLOBAL_COLOR_SCHEME_NIGHT)
+        offColour = wxColour(44, 44, 44);
+
       dc.SetBackground(wxBrush(background));
       dc.Clear();
 
-      // The lamp itself is always present. During the dark phase it is filled
-      // dark grey; during the light phase it switches to the encoded signal
-      // colour. This makes white Isophase/Quick/Flashing lights unambiguous.
-      wxColour offColour(72, 72, 72);
-      if (m_colorScheme == PI_GLOBAL_COLOR_SCHEME_DUSK)
-        offColour = wxColour(62, 62, 62);
-      else if (m_colorScheme == PI_GLOBAL_COLOR_SCHEME_NIGHT)
-        offColour = wxColour(48, 48, 48);
-
-      dc.SetPen(wxPen(contrast, 2));
-      dc.SetBrush(*wxTRANSPARENT_BRUSH);
-      dc.DrawCircle(wxPoint(17, 17), 11);
-
-      dc.SetPen(wxPen(contrast, 1));
+      // A square lamp avoids anti-aliased edge pixels. The dark phase is
+      // always a solid dark-grey field; the light phase uses the S-57 colour.
+      dc.SetPen(wxPen(border, 2));
       dc.SetBrush(wxBrush(m_lightOn ? m_lightColour : offColour));
-      dc.DrawCircle(wxPoint(17, 17), 9);
+      dc.DrawRectangle(5, 5, 20, 20);
     });
     lightRow->Add(m_lightIndicator, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
 
@@ -432,10 +445,23 @@ void ChartInspectorPi::BuildVisualSummary() {
 
     long chr = 0;
     m_s57Catalog.RawAttributeValue(lightAttributes, "LITCHR").ToLong(&chr);
+    m_lightCharacteristic = static_cast<int>(chr);
     m_lightIsFixed = chr == 1;
     m_lightPeriodSeconds = 0.0;
     m_s57Catalog.RawAttributeValue(lightAttributes, "SIGPER")
         .ToDouble(&m_lightPeriodSeconds);
+
+    // Continuous quick lights often have no SIGPER in the chart object.
+    // Use their standard repetition cadence for the visual preview.
+    if (m_lightPeriodSeconds <= 0.05) {
+      if (chr == 4)
+        m_lightPeriodSeconds = 1.0;   // Q: 60 flashes/min
+      else if (chr == 5)
+        m_lightPeriodSeconds = 0.5;   // VQ: 120 flashes/min
+      else if (chr == 6)
+        m_lightPeriodSeconds = 0.25;  // UQ: 240 flashes/min
+    }
+
     m_lightGroupCount = 1;
     wxString group =
         m_s57Catalog.RawAttributeValue(lightAttributes, "SIGGRP");
@@ -445,7 +471,7 @@ void ChartInspectorPi::BuildVisualSummary() {
     if (group.ToLong(&groupCount) && groupCount > 0)
       m_lightGroupCount = static_cast<int>(groupCount);
 
-    m_lightOn = m_lightIsFixed || m_lightPeriodSeconds <= 0.05;
+    m_lightOn = m_lightIsFixed;
     UpdateLightIndicator();
     if (!m_lightIsFixed && m_lightPeriodSeconds > 0.05) {
       m_lightTimer = new wxTimer();
@@ -453,7 +479,7 @@ void ChartInspectorPi::BuildVisualSummary() {
       m_infoPanel->Bind(wxEVT_TIMER,
                         [this](wxTimerEvent &) { UpdateLightIndicator(); },
                         m_lightTimer->GetId());
-      m_lightTimer->Start(80);
+      m_lightTimer->Start(50);
     }
   }
 
