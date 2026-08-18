@@ -5,6 +5,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #include <GL/gl.h>
@@ -12,6 +13,7 @@
 #include <wx/fileconf.h>
 #include <wx/spinctrl.h>
 #include <wx/statline.h>
+#include <wx/timer.h>
 #include <wx/tokenzr.h>
 
 extern "C" DECL_EXP opencpn_plugin *create_pi(void *ppimgr) {
@@ -26,6 +28,8 @@ int ChartInspectorPi::Init() {
 #ifdef _WIN32
   HMODULE host = GetModuleHandleW(nullptr);
   if (host) {
+    m_hitTestV3 = reinterpret_cast<HitTestV3Fn>(
+        GetProcAddress(host, "OCPNChartInspectorHitTestV3"));
     m_hitTestV2 = reinterpret_cast<HitTestV2Fn>(
         GetProcAddress(host, "OCPNChartInspectorHitTestV2"));
     m_hitTest = reinterpret_cast<HitTestFn>(
@@ -38,13 +42,14 @@ int ChartInspectorPi::Init() {
 
   m_config = GetOCPNConfigObject();
   LoadConfig();
-  BuildToolbarBitmap();
+  BuildToolbarBitmaps();
+  m_pluginBitmap = m_enabled ? m_toolbarEnabledBitmap : m_toolbarDisabledBitmap;
 
   m_toolbarId = InsertPlugInTool(
       "Chart Inspector", &m_pluginBitmap, &m_pluginBitmap, wxITEM_CHECK,
       "Chart Inspector", "Enable or disable chart object inspection", nullptr,
       -1, 0, this);
-  if (m_toolbarId >= 0) SetToolbarItemState(m_toolbarId, m_enabled);
+  UpdateToolbarVisual();
 
   return WANTS_MOUSE_EVENTS | WANTS_CURSOR_LATLON | WANTS_OVERLAY_CALLBACK |
          WANTS_OPENGL_OVERLAY_CALLBACK | WANTS_TOOLBAR_CALLBACK |
@@ -53,6 +58,7 @@ int ChartInspectorPi::Init() {
 
 bool ChartInspectorPi::DeInit() {
   SaveConfig();
+  StopLightPreview();
   if (m_toolbarId >= 0) {
     RemovePlugInTool(m_toolbarId);
     m_toolbarId = -1;
@@ -80,16 +86,29 @@ wxString ChartInspectorPi::GetLongDescription() {
          "cursor and shows readable S-57 object information on click.";
 }
 
-void ChartInspectorPi::BuildToolbarBitmap() {
-  m_pluginBitmap = wxBitmap(24, 24);
-  wxMemoryDC dc(m_pluginBitmap);
-  dc.SetBackground(wxBrush(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW)));
-  dc.Clear();
-  dc.SetBrush(*wxTRANSPARENT_BRUSH);
-  dc.SetPen(wxPen(wxColour(0, 120, 150), 2));
-  dc.DrawCircle(wxPoint(10, 10), 6);
-  dc.DrawLine(14, 14, 21, 21);
-  dc.SelectObject(wxNullBitmap);
+void ChartInspectorPi::BuildToolbarBitmaps() {
+  auto build = [](const wxColour &colour, bool active) {
+    wxBitmap bitmap(24, 24);
+    wxMemoryDC dc(bitmap);
+    dc.SetBackground(wxBrush(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW)));
+    dc.Clear();
+    dc.SetPen(wxPen(colour, active ? 3 : 2));
+    dc.SetBrush(active ? wxBrush(colour) : *wxTRANSPARENT_BRUSH);
+    dc.DrawCircle(wxPoint(9, 9), 5);
+    dc.SetBrush(*wxTRANSPARENT_BRUSH);
+    dc.DrawLine(13, 13, 21, 21);
+    dc.SelectObject(wxNullBitmap);
+    return bitmap;
+  };
+  m_toolbarEnabledBitmap = build(wxColour(0, 210, 235), true);
+  m_toolbarDisabledBitmap = build(wxColour(115, 115, 115), false);
+}
+
+void ChartInspectorPi::UpdateToolbarVisual() {
+  if (m_toolbarId < 0) return;
+  wxBitmap *bitmap = m_enabled ? &m_toolbarEnabledBitmap : &m_toolbarDisabledBitmap;
+  SetToolbarToolBitmaps(m_toolbarId, bitmap, bitmap);
+  SetToolbarItemState(m_toolbarId, m_enabled);
 }
 
 void ChartInspectorPi::LoadConfig() {
@@ -122,11 +141,20 @@ void ChartInspectorPi::SetCursorLatLon(double lat, double lon) {
   m_hasCursorPosition = true;
 }
 
+void ChartInspectorPi::SetColorScheme(PI_ColorScheme cs) {
+  m_colorScheme = cs;
+  if (m_infoPanel) {
+    DimeWindow(m_infoPanel);
+    m_infoPanel->Refresh();
+  }
+}
+
 void ChartInspectorPi::ClearHover() {
   m_hasVectorObject = false;
   m_lastFeature.clear();
   m_lastObjectName.clear();
   m_lastAttributes.clear();
+  m_lastPrimitiveType = 1;
 }
 
 bool ChartInspectorPi::IsFeatureEnabled(const wxString &feature) const {
@@ -147,14 +175,201 @@ bool ChartInspectorPi::IsFeatureEnabled(const wxString &feature) const {
   return false;
 }
 
+wxColour ChartInspectorPi::SignalColour(const wxString &value) const {
+  long code = 0;
+  value.BeforeFirst(',').ToLong(&code);
+  wxColour c(210, 210, 210);
+  switch (code) {
+    case 1: c = wxColour(245, 245, 235); break;
+    case 2: c = wxColour(25, 25, 25); break;
+    case 3: c = wxColour(235, 55, 55); break;
+    case 4: c = wxColour(45, 190, 85); break;
+    case 5: c = wxColour(55, 120, 235); break;
+    case 6: c = wxColour(245, 210, 40); break;
+    case 7: c = wxColour(130, 130, 130); break;
+    case 8: c = wxColour(145, 95, 55); break;
+    case 9: c = wxColour(255, 175, 35); break;
+    case 10: c = wxColour(145, 80, 190); break;
+    case 11: c = wxColour(245, 125, 35); break;
+    case 12: c = wxColour(220, 55, 180); break;
+    case 13: c = wxColour(245, 135, 170); break;
+    default: break;
+  }
+  double factor = 1.0;
+  if (m_colorScheme == PI_GLOBAL_COLOR_SCHEME_DUSK) factor = 0.72;
+  if (m_colorScheme == PI_GLOBAL_COLOR_SCHEME_NIGHT) factor = 0.48;
+  return wxColour(static_cast<unsigned char>(c.Red() * factor),
+                  static_cast<unsigned char>(c.Green() * factor),
+                  static_cast<unsigned char>(c.Blue() * factor));
+}
+
+wxString ChartInspectorPi::BuildLightSummary() const {
+  const wxString chr = m_s57Catalog.RawAttributeValue(m_lastAttributes, "LITCHR");
+  const wxString grp = m_s57Catalog.RawAttributeValue(m_lastAttributes, "SIGGRP");
+  const wxString col = m_s57Catalog.RawAttributeValue(m_lastAttributes, "COLOUR");
+  const wxString per = m_s57Catalog.RawAttributeValue(m_lastAttributes, "SIGPER");
+
+  long c = 0;
+  chr.ToLong(&c);
+  wxString abbr;
+  switch (c) {
+    case 1: abbr = "F"; break;
+    case 2: abbr = "Fl"; break;
+    case 3: abbr = "LFl"; break;
+    case 4: abbr = "Q"; break;
+    case 5: abbr = "VQ"; break;
+    case 6: abbr = "UQ"; break;
+    case 7: abbr = "Iso"; break;
+    case 8: abbr = "Oc"; break;
+    case 12: abbr = "Mo"; break;
+    case 28: abbr = "Al"; break;
+    default:
+      abbr = m_s57Catalog.DecodeValue("LITCHR", chr);
+      break;
+  }
+  if (!grp.IsEmpty() && grp != "()" && grp != "(1)") abbr += grp;
+
+  long colourCode = 0;
+  col.BeforeFirst(',').ToLong(&colourCode);
+  wxString colourAbbr;
+  switch (colourCode) {
+    case 1: colourAbbr = "W"; break;
+    case 3: colourAbbr = "R"; break;
+    case 4: colourAbbr = "G"; break;
+    case 5: colourAbbr = "Bu"; break;
+    case 6: colourAbbr = "Y"; break;
+    default: colourAbbr = m_s57Catalog.DecodeValue("COLOUR", col); break;
+  }
+
+  wxString result = abbr;
+  if (!colourAbbr.IsEmpty()) result += " " + colourAbbr;
+  if (!per.IsEmpty()) result += " " + per + "s";
+  return result;
+}
+
+void ChartInspectorPi::StopLightPreview() {
+  if (m_lightTimer) {
+    m_lightTimer->Stop();
+    delete m_lightTimer;
+    m_lightTimer = nullptr;
+  }
+  m_lightIndicator = nullptr;
+}
+
+void ChartInspectorPi::UpdateLightIndicator() {
+  if (!m_lightIndicator) return;
+  bool on = true;
+  if (!m_lightIsFixed && m_lightPeriodSeconds > 0.05) {
+    const long long periodMs = static_cast<long long>(m_lightPeriodSeconds * 1000.0);
+    const long long nowMs = wxGetUTCTimeMillis().GetValue();
+    const double phase = static_cast<double>(nowMs % periodMs) / periodMs;
+    const int flashes = std::max(1, m_lightGroupCount);
+    const double activeWindow = 0.62;
+    if (phase >= activeWindow) {
+      on = false;
+    } else {
+      const double local = std::fmod(phase * flashes / activeWindow, 1.0);
+      on = local < m_lightDutyCycle;
+    }
+  }
+  m_lightIndicator->SetForegroundColour(
+      on ? m_lightColour : wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
+  m_lightIndicator->Refresh();
+}
+
+void ChartInspectorPi::BuildVisualSummary() {
+  if (!m_infoVisual) return;
+  StopLightPreview();
+  wxSizer *sizer = m_infoVisual->GetSizer();
+  if (!sizer) {
+    sizer = new wxBoxSizer(wxVERTICAL);
+    m_infoVisual->SetSizer(sizer);
+  }
+  sizer->Clear(true);
+
+  const wxString colourRaw =
+      m_s57Catalog.RawAttributeValue(m_lastAttributes, "COLOUR");
+  if (!colourRaw.IsEmpty()) {
+    wxBoxSizer *row = new wxBoxSizer(wxHORIZONTAL);
+    wxStaticText *label = new wxStaticText(m_infoVisual, wxID_ANY, "Colour");
+    wxFont f = label->GetFont();
+    f.SetWeight(wxFONTWEIGHT_BOLD);
+    label->SetFont(f);
+    row->Add(label, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+
+    wxStringTokenizer values(colourRaw, ",", wxTOKEN_STRTOK);
+    while (values.HasMoreTokens()) {
+      wxString token = values.GetNextToken();
+      token.Trim(true); token.Trim(false);
+      wxPanel *chip = new wxPanel(m_infoVisual, wxID_ANY, wxDefaultPosition,
+                                  wxSize(18, 18), wxBORDER_SIMPLE);
+      chip->SetMinSize(wxSize(18, 18));
+      chip->SetBackgroundColour(SignalColour(token));
+      row->Add(chip, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+    }
+    row->Add(new wxStaticText(
+                 m_infoVisual, wxID_ANY,
+                 m_s57Catalog.DecodeValue("COLOUR", colourRaw)),
+             0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(row, 0, wxBOTTOM, 8);
+  }
+
+  if (m_lastFeature == "LIGHTS") {
+    wxBoxSizer *lightRow = new wxBoxSizer(wxHORIZONTAL);
+    m_lightIndicator = new wxStaticText(m_infoVisual, wxID_ANY, wxString::FromUTF8("●"));
+    wxFont lf = m_lightIndicator->GetFont();
+    lf.SetPointSize(lf.GetPointSize() + 12);
+    m_lightIndicator->SetFont(lf);
+    m_lightColour = SignalColour(colourRaw);
+    lightRow->Add(m_lightIndicator, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+
+    wxBoxSizer *text = new wxBoxSizer(wxVERTICAL);
+    wxStaticText *character =
+        new wxStaticText(m_infoVisual, wxID_ANY, BuildLightSummary());
+    wxFont cf = character->GetFont();
+    cf.SetWeight(wxFONTWEIGHT_BOLD);
+    cf.SetPointSize(cf.GetPointSize() + 2);
+    character->SetFont(cf);
+    text->Add(character, 0);
+    text->Add(new wxStaticText(m_infoVisual, wxID_ANY,
+                              "Animated interpretation of the encoded light characteristic"),
+              0, wxTOP, 2);
+    lightRow->Add(text, 1, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(lightRow, 0, wxEXPAND | wxBOTTOM, 8);
+
+    long chr = 0;
+    m_s57Catalog.RawAttributeValue(m_lastAttributes, "LITCHR").ToLong(&chr);
+    m_lightIsFixed = chr == 1;
+    m_lightPeriodSeconds = 0.0;
+    m_s57Catalog.RawAttributeValue(m_lastAttributes, "SIGPER")
+        .ToDouble(&m_lightPeriodSeconds);
+    m_lightGroupCount = 1;
+    wxString group = m_s57Catalog.RawAttributeValue(m_lastAttributes, "SIGGRP");
+    group.Replace("(", ""); group.Replace(")", "");
+    long groupCount = 1;
+    if (group.ToLong(&groupCount) && groupCount > 0)
+      m_lightGroupCount = static_cast<int>(groupCount);
+
+    UpdateLightIndicator();
+    if (!m_lightIsFixed && m_lightPeriodSeconds > 0.05) {
+      m_lightTimer = new wxTimer();
+      m_lightTimer->SetOwner(m_infoPanel);
+      m_infoPanel->Bind(wxEVT_TIMER,
+                        [this](wxTimerEvent &) { UpdateLightIndicator(); },
+                        m_lightTimer->GetId());
+      m_lightTimer->Start(80);
+    }
+  }
+
+  m_infoVisual->Show(sizer->GetItemCount() > 0);
+  m_infoVisual->Layout();
+}
+
 void ChartInspectorPi::BuildInfoPanel(wxWindow *canvas) {
   if (m_infoPanel || !canvas) return;
 
   m_infoPanel = new wxPanel(canvas, wxID_ANY, wxDefaultPosition,
                             wxDefaultSize, wxBORDER_SIMPLE);
-  m_infoPanel->SetBackgroundColour(
-      wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
-
   wxBoxSizer *root = new wxBoxSizer(wxVERTICAL);
   wxBoxSizer *header = new wxBoxSizer(wxHORIZONTAL);
 
@@ -186,8 +401,12 @@ void ChartInspectorPi::BuildInfoPanel(wxWindow *canvas) {
   root->Add(new wxStaticLine(m_infoPanel), 0,
             wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 12);
 
+  m_infoVisual = new wxPanel(m_infoPanel, wxID_ANY);
+  m_infoVisual->SetSizer(new wxBoxSizer(wxVERTICAL));
+  root->Add(m_infoVisual, 0, wxEXPAND | wxLEFT | wxRIGHT, 12);
+
   m_infoBody = new wxStaticText(m_infoPanel, wxID_ANY, wxEmptyString);
-  root->Add(m_infoBody, 0, wxEXPAND | wxLEFT | wxRIGHT, 12);
+  root->Add(m_infoBody, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 12);
 
   m_infoTechnical = new wxStaticText(m_infoPanel, wxID_ANY, wxEmptyString);
   wxFont techFont = m_infoTechnical->GetFont();
@@ -198,10 +417,12 @@ void ChartInspectorPi::BuildInfoPanel(wxWindow *canvas) {
   root->Add(m_infoTechnical, 0, wxEXPAND | wxALL, 12);
 
   m_infoPanel->SetSizer(root);
+  DimeWindow(m_infoPanel);
   m_infoPanel->Hide();
 }
 
 void ChartInspectorPi::HideObjectPopup() {
+  StopLightPreview();
   if (m_infoPanel) m_infoPanel->Hide();
 }
 
@@ -215,7 +436,11 @@ void ChartInspectorPi::ShowObjectPopup() {
   m_infoTitle->SetLabel(m_s57Catalog.ObjectName(m_lastFeature));
   m_infoSubtitle->SetLabel(m_lastObjectName);
   m_infoSubtitle->Show(!m_lastObjectName.IsEmpty());
-  m_infoAcronym->SetLabel("S-57 object: " + m_lastFeature);
+  const wxString geometry = m_lastPrimitiveType == 3 ? "Area" :
+                            m_lastPrimitiveType == 2 ? "Line" : "Point";
+  m_infoAcronym->SetLabel("S-57: " + m_lastFeature + "  ·  " + geometry);
+
+  BuildVisualSummary();
 
   wxString technical;
   const wxString readable =
@@ -234,12 +459,13 @@ void ChartInspectorPi::ShowObjectPopup() {
     m_infoTechnical->Hide();
   }
 
+  DimeWindow(m_infoPanel);
   m_infoPanel->Layout();
   m_infoPanel->Fit();
 
   wxSize size = m_infoPanel->GetSize();
-  if (size.GetWidth() < 300) size.SetWidth(300);
-  if (size.GetWidth() > 420) size.SetWidth(420);
+  if (size.GetWidth() < 320) size.SetWidth(320);
+  if (size.GetWidth() > 440) size.SetWidth(440);
   m_infoPanel->SetSize(size);
   m_infoPanel->Layout();
 
@@ -251,7 +477,8 @@ void ChartInspectorPi::ShowObjectPopup() {
 }
 
 void ChartInspectorPi::UpdateHoverObject() {
-  if (!m_enabled || (!m_hitTestV2 && !m_hitTest) || !m_hasCursorPosition) {
+  if (!m_enabled || (!m_hitTestV3 && !m_hitTestV2 && !m_hitTest) ||
+      !m_hasCursorPosition) {
     ClearHover();
     return;
   }
@@ -259,21 +486,30 @@ void ChartInspectorPi::UpdateHoverObject() {
   char feature[32] = {0};
   char objectName[128] = {0};
   char attributes[2048] = {0};
-  double objectLat = 0.0;
-  double objectLon = 0.0;
+  double markerLat = 0.0;
+  double markerLon = 0.0;
+  int primitiveType = 1;
 
   bool found = false;
-  if (m_hitTestV2) {
+  if (m_hitTestV3) {
+    const wxCharBuffer filter = m_featureFilter.ToUTF8();
+    found = m_hitTestV3(
+        0, m_cursorLat, m_cursorLon, static_cast<double>(m_hitRadiusPixels),
+        filter.data(), feature, static_cast<int>(sizeof(feature)), objectName,
+        static_cast<int>(sizeof(objectName)), attributes,
+        static_cast<int>(sizeof(attributes)), &primitiveType, &markerLat,
+        &markerLon);
+  } else if (m_hitTestV2) {
     found = m_hitTestV2(
         0, m_cursorLat, m_cursorLon, static_cast<double>(m_hitRadiusPixels),
         feature, static_cast<int>(sizeof(feature)), objectName,
         static_cast<int>(sizeof(objectName)), attributes,
-        static_cast<int>(sizeof(attributes)), &objectLat, &objectLon);
+        static_cast<int>(sizeof(attributes)), &markerLat, &markerLon);
   } else if (m_hitTest) {
     found = m_hitTest(
         0, m_cursorLat, m_cursorLon, static_cast<double>(m_hitRadiusPixels),
         feature, static_cast<int>(sizeof(feature)), objectName,
-        static_cast<int>(sizeof(objectName)), &objectLat, &objectLon);
+        static_cast<int>(sizeof(objectName)), &markerLat, &markerLon);
   }
 
   const wxString featureName = wxString::FromUTF8(feature).Upper();
@@ -284,8 +520,9 @@ void ChartInspectorPi::UpdateHoverObject() {
     m_lastFeature = featureName;
     m_lastObjectName = wxString::FromUTF8(objectName);
     m_lastAttributes = wxString::FromUTF8(attributes);
-    m_lastObjectLat = objectLat;
-    m_lastObjectLon = objectLon;
+    m_lastObjectLat = markerLat;
+    m_lastObjectLon = markerLon;
+    m_lastPrimitiveType = primitiveType;
   } else {
     ClearHover();
   }
@@ -311,7 +548,7 @@ bool ChartInspectorPi::MouseEventHook(wxMouseEvent &event) {
 void ChartInspectorPi::OnToolbarToolCallback(int id) {
   if (id != m_toolbarId) return;
   m_enabled = !m_enabled;
-  SetToolbarItemState(m_toolbarId, m_enabled);
+  UpdateToolbarVisual();
   if (!m_enabled) {
     ClearHover();
     HideObjectPopup();
@@ -348,7 +585,7 @@ void ChartInspectorPi::ShowPreferencesDialog(wxWindow *parent) {
   interaction->Add(radiusRow, 0, wxALL, 8);
   interaction->Add(
       new wxStaticText(&dialog, wxID_ANY,
-                       "Hover highlights a nearby enabled object. Click the highlighted object to open its information card."),
+                       "Hover highlights a nearby enabled object. Click it to open the readable information card."),
       0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
   root->Add(interaction, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 
@@ -356,15 +593,14 @@ void ChartInspectorPi::ShowPreferencesDialog(wxWindow *parent) {
       new wxStaticBoxSizer(wxVERTICAL, &dialog, "Object classes");
   objects->Add(new wxStaticText(
                    &dialog, wxID_ANY,
-                   "Choose which S-57 chart object classes Chart Inspector should react to."),
+                   "Choose the S-57 object classes Chart Inspector should react to."),
                0, wxALL, 8);
 
   wxCheckListBox *classes = new wxCheckListBox(
       &dialog, wxID_ANY, wxDefaultPosition, wxSize(580, 330));
   std::vector<wxString> classAcronyms;
   for (const auto &info : m_s57Catalog.ObjectClasses()) {
-    const unsigned int index = classes->Append(
-        info.acronym + "  -  " + info.name);
+    const unsigned int index = classes->Append(info.acronym + "  -  " + info.name);
     classes->Check(index, IsFeatureEnabled(info.acronym));
     classAcronyms.push_back(info.acronym);
   }
@@ -406,6 +642,7 @@ void ChartInspectorPi::ShowPreferencesDialog(wxWindow *parent) {
   root->Add(dialog.CreateSeparatedButtonSizer(wxOK | wxCANCEL), 0,
             wxEXPAND | wxALL, 10);
   dialog.SetSizer(root);
+  DimeWindow(&dialog);
   dialog.Layout();
   dialog.CentreOnParent();
 
@@ -422,7 +659,7 @@ void ChartInspectorPi::ShowPreferencesDialog(wxWindow *parent) {
     }
     m_featureFilter = filter;
 
-    if (m_toolbarId >= 0) SetToolbarItemState(m_toolbarId, m_enabled);
+    UpdateToolbarVisual();
     if (!m_enabled) ClearHover();
     SaveConfig();
     wxWindow *canvas = GetOCPNCanvasWindow();
@@ -433,13 +670,8 @@ void ChartInspectorPi::ShowPreferencesDialog(wxWindow *parent) {
 void ChartInspectorPi::SendVectorChartObjectInfo(
     wxString &chart, wxString &feature, wxString &objname, double lat,
     double lon, double scale, int nativescale) {
-  (void)chart;
-  (void)feature;
-  (void)objname;
-  (void)lat;
-  (void)lon;
-  (void)scale;
-  (void)nativescale;
+  (void)chart; (void)feature; (void)objname; (void)lat; (void)lon;
+  (void)scale; (void)nativescale;
 }
 
 bool ChartInspectorPi::RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp) {
@@ -448,7 +680,7 @@ bool ChartInspectorPi::RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp) {
   GetCanvasPixLL(vp, &p, m_lastObjectLat, m_lastObjectLon);
   dc.SetBrush(*wxTRANSPARENT_BRUSH);
   dc.SetPen(wxPen(wxColour(0, 255, 255), 3));
-  dc.DrawCircle(p, 12);
+  dc.DrawCircle(p, m_lastPrimitiveType == 1 ? 12 : 9);
   return true;
 }
 
@@ -456,8 +688,7 @@ bool ChartInspectorPi::RenderGLOverlayMultiCanvas(wxGLContext *pcontext,
                                                    PlugIn_ViewPort *vp,
                                                    int canvasIndex,
                                                    int priority) {
-  (void)pcontext;
-  (void)canvasIndex;
+  (void)pcontext; (void)canvasIndex;
   if (!vp) return false;
   if (priority != -1 && priority != OVERLAY_LEGACY) return false;
   if (!m_enabled || !m_hasVectorObject) return true;
@@ -483,7 +714,7 @@ bool ChartInspectorPi::RenderGLOverlayMultiCanvas(wxGLContext *pcontext,
   GetCanvasPixLL(vp, &p, m_lastObjectLat, m_lastObjectLon);
   const float cx = static_cast<float>(p.x);
   const float cy = static_cast<float>(p.y);
-  const float r = 12.0f;
+  const float r = m_lastPrimitiveType == 1 ? 12.0f : 9.0f;
   glColor4f(0.0f, 1.0f, 1.0f, 0.9f);
   glLineWidth(3.0f);
   glBegin(GL_LINE_LOOP);
