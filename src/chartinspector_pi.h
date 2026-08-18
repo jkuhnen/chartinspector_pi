@@ -29,8 +29,10 @@ public:
 
 private:
   wxBitmap m_pluginBitmap;
+  wxPoint m_mousePosition;
   double m_cursorLat = 0.0;
   double m_cursorLon = 0.0;
+  bool m_hasMousePosition = false;
   bool m_hasCursorPosition = false;
 };
 
