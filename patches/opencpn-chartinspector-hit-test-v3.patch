@@ -5,7 +5,7 @@ diff --git a/gui/src/ocpn_plugin_gui.cpp b/gui/src/ocpn_plugin_gui.cpp
  #include <wx/string.h>
 +#include <wx/tokenzr.h>
  #include <wx/window.h>
-@@ -537,4 +538,189 @@
+@@ -537,4 +538,188 @@
    ChartInspectorCopyString(attributes, attributes_size, utf8.data());
    return true;
  }
