@@ -7,7 +7,9 @@
 #include "s57_catalog.h"
 
 class wxFileConfig;
-class wxPopupWindow;
+class wxFlexGridSizer;
+class wxPanel;
+class wxStaticText;
 
 class ChartInspectorPi : public opencpn_plugin_118 {
 public:
@@ -57,7 +59,9 @@ private:
   void SaveConfig();
   void ClearHover();
   bool IsFeatureEnabled(const wxString &feature) const;
+  bool FilterContainsToken(const wxString &token) const;
   void UpdateHoverObject();
+  void BuildInfoPanel(wxWindow *canvas);
   void ShowObjectPopup();
   void HideObjectPopup();
 
@@ -75,14 +79,18 @@ private:
   double m_lastObjectLon = 0.0;
   bool m_hasVectorObject = false;
 
-  wxPopupWindow *m_hoverPopup = nullptr;
-  wxStaticText *m_hoverText = nullptr;
+  wxPanel *m_infoPanel = nullptr;
+  wxStaticText *m_infoTitle = nullptr;
+  wxStaticText *m_infoSubtitle = nullptr;
+  wxStaticText *m_infoAcronym = nullptr;
+  wxFlexGridSizer *m_infoGrid = nullptr;
+  wxStaticText *m_infoTechnical = nullptr;
 
   wxFileConfig *m_config = nullptr;
   int m_toolbarId = -1;
   bool m_enabled = true;
   bool m_showTechnicalData = false;
-  int m_hitRadiusPixels = 7;
+  int m_hitRadiusPixels = 5;
   wxString m_featureFilter = "BOY*,BCN*,LIGHTS,WRECKS,UWTROC,OBSTRN";
 
   S57Catalog m_s57Catalog;
