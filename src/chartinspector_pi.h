@@ -111,6 +111,7 @@ private:
   int m_lightCharacteristic = 0;
   double m_lightPeriodSeconds = 0.0;
   int m_lightGroupCount = 1;
+  bool m_lightHasLongFlash = false;
   bool m_lightIsFixed = false;
   bool m_lightOn = true;
 
