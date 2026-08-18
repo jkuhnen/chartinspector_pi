@@ -1,15 +1,11 @@
 diff --git a/gui/src/ocpn_plugin_gui.cpp b/gui/src/ocpn_plugin_gui.cpp
-index 000000000..111111111 100644
 --- a/gui/src/ocpn_plugin_gui.cpp
 +++ b/gui/src/ocpn_plugin_gui.cpp
-@@ -16,6 +16,7 @@
-  */
+@@ -25,2 +25,3 @@
  #include <vector>
 +#include <cstring>
  #include "dychart.h"  // Must be ahead due to buggy GL includes handling
- 
- #include <wx/wx.h>
-@@ -47,6 +48,9 @@
+@@ -54,4 +55,7 @@
  #include "ais.h"
 +#include "chartbase.h"
  #include "chartdb.h"
@@ -17,9 +13,7 @@ index 000000000..111111111 100644
 +#include "quilt.h"
 +#include "s57chart.h"
  #include "config_mgr.h"
- #include "font_mgr.h"
- #include "gl_chart_canvas.h"
-@@ -170,6 +174,119 @@ void GetCanvasLLPix(PlugIn_ViewPort* vp, wxPoint p, double* plat,
+@@ -266,4 +270,139 @@
    return ocpn_vp.GetLLFromPix(p, plat, plon);
  }
  
@@ -28,16 +22,12 @@ index 000000000..111111111 100644
 +int ChartInspectorFeaturePriority(const char* feature) {
 +  if (!feature || !feature[0]) return 0;
 +
-+  // Initial Chart Inspector scope: aids to navigation first.
 +  if (!std::strncmp(feature, "BOY", 3) || !std::strncmp(feature, "BCN", 3))
 +    return 300;
 +  if (!std::strcmp(feature, "LIGHTS")) return 250;
-+
-+  // Useful safety-related point objects for the next iteration.
 +  if (!std::strcmp(feature, "WRECKS") || !std::strcmp(feature, "UWTROC") ||
 +      !std::strcmp(feature, "OBSTRN"))
 +    return 200;
-+
 +  return 100;
 +}
 +
@@ -51,12 +41,6 @@ index 000000000..111111111 100644
 +
 +}  // namespace
 +
-+// Experimental, read-only vector chart hit-test used by Chart Inspector.
-+//
-+// This deliberately exposes only copied feature metadata and coordinates. It
-+// does not expose chart-provider internals, object pointers or decrypted chart
-+// data. Both native S-57 and vector charts supplied by plugins use OpenCPN's
-+// existing selection paths.
 +extern "C" DECL_EXP bool OCPNChartInspectorHitTest(
 +    int canvas_index, double lat, double lon, double radius_pixels,
 +    char* feature, int feature_size, char* object_name, int object_name_size,
@@ -168,7 +152,4 @@ index 000000000..111111111 100644
 +  *object_lon = best_lon;
 +  return true;
 +}
-+
  bool GetGlobalColor(wxString colorName, wxColour* pcolour) {
-   wxColour c = GetGlobalColor(colorName);
-   *pcolour = c;
