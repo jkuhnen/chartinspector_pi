@@ -108,9 +108,9 @@ private:
   wxPanel *m_lightIndicator = nullptr;
   wxTimer *m_lightTimer = nullptr;
   wxColour m_lightColour;
+  int m_lightCharacteristic = 0;
   double m_lightPeriodSeconds = 0.0;
   int m_lightGroupCount = 1;
-  double m_lightDutyCycle = 0.22;
   bool m_lightIsFixed = false;
   bool m_lightOn = true;
 
