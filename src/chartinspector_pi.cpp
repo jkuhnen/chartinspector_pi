@@ -76,7 +76,7 @@ bool ChartInspectorPi::DeInit() {
 int ChartInspectorPi::GetAPIVersionMajor() { return 1; }
 int ChartInspectorPi::GetAPIVersionMinor() { return 18; }
 int ChartInspectorPi::GetPlugInVersionMajor() { return 0; }
-int ChartInspectorPi::GetPlugInVersionMinor() { return 5; }
+int ChartInspectorPi::GetPlugInVersionMinor() { return 6; }
 int ChartInspectorPi::GetToolbarToolCount() { return 1; }
 
 wxBitmap *ChartInspectorPi::GetPlugInBitmap() { return &m_pluginBitmap; }
@@ -393,15 +393,21 @@ void ChartInspectorPi::BuildVisualSummary() {
       dc.SetBackground(wxBrush(background));
       dc.Clear();
 
-      // Always draw a theme-aware contrast ring outside the signal colour.
-      // This keeps white/yellow lights visible on bright day backgrounds and
-      // dark lights visible in night mode without changing the actual colour.
+      // The lamp itself is always present. During the dark phase it is filled
+      // dark grey; during the light phase it switches to the encoded signal
+      // colour. This makes white Isophase/Quick/Flashing lights unambiguous.
+      wxColour offColour(72, 72, 72);
+      if (m_colorScheme == PI_GLOBAL_COLOR_SCHEME_DUSK)
+        offColour = wxColour(62, 62, 62);
+      else if (m_colorScheme == PI_GLOBAL_COLOR_SCHEME_NIGHT)
+        offColour = wxColour(48, 48, 48);
+
       dc.SetPen(wxPen(contrast, 2));
       dc.SetBrush(*wxTRANSPARENT_BRUSH);
       dc.DrawCircle(wxPoint(17, 17), 11);
 
-      dc.SetPen(wxPen(m_lightColour, 2));
-      dc.SetBrush(m_lightOn ? wxBrush(m_lightColour) : *wxTRANSPARENT_BRUSH);
+      dc.SetPen(wxPen(contrast, 1));
+      dc.SetBrush(wxBrush(m_lightOn ? m_lightColour : offColour));
       dc.DrawCircle(wxPoint(17, 17), 9);
     });
     lightRow->Add(m_lightIndicator, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
