@@ -6,7 +6,7 @@ diff --git a/gui/src/ocpn_plugin_gui.cpp b/gui/src/ocpn_plugin_gui.cpp
  #include "s57chart.h"
 +#include "ogr_s57.h"
  #include "config_mgr.h"
-@@ -2,4 +2,125 @@
+@@ -2,4 +2,135 @@
    *object_lon = best_lon;
    return true;
  }
