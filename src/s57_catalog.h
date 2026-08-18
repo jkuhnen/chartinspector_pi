@@ -20,6 +20,10 @@ public:
   std::vector<ObjectClassInfo> ObjectClasses() const;
   wxString FormatAttributes(const wxString &rawAttributes,
                             wxString *technical = nullptr) const;
+  wxString RawAttributeValue(const wxString &rawAttributes,
+                             const wxString &acronym) const;
+  wxString DecodeValue(const wxString &acronym,
+                       const wxString &rawValue) const;
 
 private:
   struct AttributeDefinition {
