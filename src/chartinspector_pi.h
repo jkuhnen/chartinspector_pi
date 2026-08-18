@@ -63,6 +63,7 @@ private:
 
   void BuildToolbarBitmaps();
   void UpdateToolbarVisual();
+  void ApplyInfoTheme();
   void LoadConfig();
   void SaveConfig();
   void ClearHover();
@@ -121,6 +122,7 @@ private:
   HitTestFn m_hitTest = nullptr;
   HitTestV2Fn m_hitTestV2 = nullptr;
   HitTestV3Fn m_hitTestV3 = nullptr;
+  HitTestV3Fn m_hitTestV4 = nullptr;
 };
 
 #endif  // CHARTINSPECTOR_PI_H
