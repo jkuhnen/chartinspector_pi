@@ -102,13 +102,14 @@ private:
   wxPanel *m_infoVisual = nullptr;
   wxStaticText *m_infoBody = nullptr;
   wxStaticText *m_infoTechnical = nullptr;
-  wxStaticText *m_lightIndicator = nullptr;
+  wxPanel *m_lightIndicator = nullptr;
   wxTimer *m_lightTimer = nullptr;
   wxColour m_lightColour;
   double m_lightPeriodSeconds = 0.0;
   int m_lightGroupCount = 1;
   double m_lightDutyCycle = 0.22;
   bool m_lightIsFixed = false;
+  bool m_lightOn = true;
 
   wxFileConfig *m_config = nullptr;
   int m_toolbarId = -1;
