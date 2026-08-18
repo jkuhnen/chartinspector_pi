@@ -27,6 +27,9 @@ int ChartInspectorPi::Init() {
   }
 #endif
 
+  wxString *sharedData = GetpSharedDataLocation();
+  if (sharedData) m_s57Catalog.Load(*sharedData);
+
   return WANTS_MOUSE_EVENTS | WANTS_CURSOR_LATLON | WANTS_OVERLAY_CALLBACK |
          WANTS_OPENGL_OVERLAY_CALLBACK | WANTS_VECTOR_CHART_OBJECT_INFO;
 }
@@ -83,11 +86,17 @@ void ChartInspectorPi::UpdateHoverPopup(bool found) {
     m_hoverPopup->SetSizer(popupSizer);
   }
 
-  wxString text = m_lastFeature;
+  wxString title = m_s57Catalog.ObjectName(m_lastFeature);
+  wxString text = title;
   if (!m_lastObjectName.IsEmpty()) text += " | " + m_lastObjectName;
-  if (!m_lastAttributes.IsEmpty()) text += "\n" + m_lastAttributes;
+  text += "\n" + m_lastFeature;
+
+  const wxString readableAttributes =
+      m_s57Catalog.FormatAttributes(m_lastAttributes);
+  if (!readableAttributes.IsEmpty()) text += "\n\n" + readableAttributes;
+
   m_hoverText->SetLabel(text);
-  m_hoverText->Wrap(340);
+  m_hoverText->Wrap(380);
   m_hoverPopup->Fit();
 
   wxPoint pos = canvas->ClientToScreen(m_mousePosition + wxPoint(18, 18));
