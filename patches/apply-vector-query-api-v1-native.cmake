@@ -141,6 +141,9 @@ endif()
 if(NOT C MATCHES "PlugInChartBaseGLPlus3::PlugInChartBaseGLPlus3")
   set(PLUS3_IMPL [===[
 
+// ----------------------------------------------------------------------------
+// PlugInChartBaseGLPlus3
+// ----------------------------------------------------------------------------
 PlugInChartBaseGLPlus3::PlugInChartBaseGLPlus3() = default;
 PlugInChartBaseGLPlus3::~PlugInChartBaseGLPlus3() = default;
 
@@ -153,16 +156,19 @@ bool PlugInChartBaseGLPlus3::QueryVectorObjectsV1(
   (void)user_data;
   return false;
 }
+
 ]===])
 
-  string(FIND "${C}" "PlugInChartBaseGLPlus2::PlugInChartBaseGLPlus2" PLUS2_IMPL)
-  if(PLUS2_IMPL EQUAL -1)
-    message(FATAL_ERROR "Could not locate PlugInChartBaseGLPlus2 implementation anchor in ${IMPL}")
+  # This source is part of the normal GUI executable. Insert the provider
+  # extension defaults before an existing stable exported helper rather than
+  # looking for Plus2, whose implementation lives in the CLI shim.
+  string(FIND "${C}" "bool GetGlobalColor(wxString colorName, wxColour* pcolour)" PLUS3_IMPL_POS)
+  if(PLUS3_IMPL_POS EQUAL -1)
+    message(FATAL_ERROR "Could not locate GetGlobalColor implementation anchor in ${IMPL}")
   endif()
-  # Put the Plus3 default methods immediately before Plus2 implementation.
-  string(SUBSTRING "${C}" 0 ${PLUS2_IMPL} C_PREFIX)
-  string(SUBSTRING "${C}" ${PLUS2_IMPL} -1 C_SUFFIX)
-  set(C "${C_PREFIX}${PLUS3_IMPL}\n${C_SUFFIX}")
+  string(SUBSTRING "${C}" 0 ${PLUS3_IMPL_POS} C_PREFIX)
+  string(SUBSTRING "${C}" ${PLUS3_IMPL_POS} -1 C_SUFFIX)
+  set(C "${C_PREFIX}${PLUS3_IMPL}${C_SUFFIX}")
 endif()
 
 if(NOT C MATCHES "QueryVectorChartObjectsV1\\(")
@@ -461,5 +467,6 @@ endif()
 file(WRITE "${IMPL}" "${C}")
 
 message(STATUS "Installed Vector Object Query API v1 declarations in ${HEADER}")
+message(STATUS "Installed PlugInChartBaseGLPlus3 defaults in ${IMPL}")
 message(STATUS "Installed native S-57 QueryVectorChartObjectsV1 implementation in ${IMPL}")
 message(STATUS "Plugin-chart provider support is intentionally not enabled yet.")
