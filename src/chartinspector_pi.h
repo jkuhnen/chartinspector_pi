@@ -38,6 +38,12 @@ private:
                              int featureSize, char *objectName,
                              int objectNameSize, double *objectLat,
                              double *objectLon);
+  using HitTestV2Fn = bool (*)(int canvasIndex, double lat, double lon,
+                               double radiusPixels, char *feature,
+                               int featureSize, char *objectName,
+                               int objectNameSize, char *attributes,
+                               int attributesSize, double *objectLat,
+                               double *objectLon);
 
   void UpdateHoverObject();
 
@@ -51,6 +57,7 @@ private:
   wxString m_lastChart;
   wxString m_lastFeature;
   wxString m_lastObjectName;
+  wxString m_lastAttributes;
   double m_lastObjectLat = 0.0;
   double m_lastObjectLon = 0.0;
   double m_lastObjectScale = 0.0;
@@ -58,6 +65,7 @@ private:
   bool m_hasVectorObject = false;
 
   HitTestFn m_hitTest = nullptr;
+  HitTestV2Fn m_hitTestV2 = nullptr;
 };
 
 #endif  // CHARTINSPECTOR_PI_H
