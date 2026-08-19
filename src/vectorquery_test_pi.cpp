@@ -24,7 +24,6 @@ struct PI_VectorQueryV1 {
   double lat;
   double lon;
   double search_radius_pixels;
-  const char *feature_filter_utf8;
 };
 
 struct PI_VectorPositionV1 {
@@ -102,6 +101,17 @@ bool LogObject(const PI_VectorObjectV1 *object, void *user_data) {
                  p.lon);
   }
 
+  if (object->attribute_count > 0 && object->attributes) {
+    for (uint32_t i = 0; i < object->attribute_count; ++i) {
+      const PI_VectorAttributeV1 &attr = object->attributes[i];
+      const char *attr_name = attr.name_utf8 ? attr.name_utf8 : "";
+      const char *attr_value = attr.value_utf8 ? attr.value_utf8 : "";
+      wxLogMessage("VECTORQUERY_TEST attr object=%d %s=%s", counter->count,
+                   wxString::FromUTF8(attr_name),
+                   wxString::FromUTF8(attr_value));
+    }
+  }
+
   return true;
 }
 
@@ -141,7 +151,7 @@ public:
     return "Diagnostic consumer for QueryVectorChartObjectsV1";
   }
   wxString GetLongDescription() override {
-    return "Logs native vector chart candidates on left click.";
+    return "Logs vector chart candidates and attributes on left click.";
   }
 
   void SetCursorLatLon(double lat, double lon) override {
@@ -158,7 +168,6 @@ public:
     query.lat = m_lat;
     query.lon = m_lon;
     query.search_radius_pixels = 12.0;
-    query.feature_filter_utf8 = nullptr;
 
     QueryResultCounter counter;
     const bool ok = m_query(0, &query, LogObject, &counter);
