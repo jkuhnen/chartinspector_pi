@@ -176,8 +176,16 @@ private:
   bool m_have_position = false;
 };
 
-extern "C" DECL_EXP opencpn_plugin *create_pi(void *ppimgr) {
+#ifdef _WIN32
+#define VECTORQUERY_TEST_EXPORT __declspec(dllexport)
+#else
+#define VECTORQUERY_TEST_EXPORT DECL_EXP
+#endif
+
+extern "C" VECTORQUERY_TEST_EXPORT opencpn_plugin *create_pi(void *ppimgr) {
   return new VectorQueryTestPi(ppimgr);
 }
 
-extern "C" DECL_EXP void destroy_pi(opencpn_plugin *plugin) { delete plugin; }
+extern "C" VECTORQUERY_TEST_EXPORT void destroy_pi(opencpn_plugin *plugin) {
+  delete plugin;
+}
