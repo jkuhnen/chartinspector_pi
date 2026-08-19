@@ -1,231 +1,237 @@
-# OpenCPN Vector Object Query API proposal
+# OpenCPN Vector Object Query API v1
 
-Status: design draft for Chart Inspector / upstream discussion
+Status: upstream-oriented API proposal
 
 ## Goal
 
-Provide plugins with a small, provider-neutral way to inspect vector-chart objects at a geographic position without exposing `S57Obj`, `PI_S57Obj`, render-rule objects, vertex buffers or provider-owned pointers.
+Add a small, provider-neutral OpenCPN plugin API which lets ordinary plugins inspect nearby vector-chart objects without exposing `S57Obj`, `PI_S57Obj`, render rules, VBOs or provider-owned pointers.
 
-The API is intentionally limited to **query + copied geometry + copied attributes**. Rendering, hover policy, hit-test ranking and UI remain the responsibility of the consuming plugin.
+The API has one responsibility:
 
-## Design requirements
+> Enumerate safe vector-object candidates, including geographic geometry and raw attributes, near a requested position.
 
-1. Safe across plugin DLL boundaries.
-2. No provider-owned pointers in returned data.
-3. Works for native S-57 and plugin-provided vector charts such as o-charts.
-4. Point, line and area geometry use the same representation.
-5. Coordinates are WGS84 latitude/longitude in decimal degrees.
-6. Area interiors are not special-cased by the API; consumers can choose boundary-only or interior hit testing.
-7. Existing chart plugins remain compatible. A provider which does not implement the extension simply returns no geometry through the new path.
-8. The API does not contain Chart Inspector-specific concepts such as cyan highlighting, tooltips or feature priorities.
+Selection policy, hover behaviour, highlighting and UI remain outside OpenCPN core.
 
-## Public data types
+## Upstream design decisions
 
-```cpp
-enum class PI_VectorGeometryType : uint8_t {
-  Unknown = 0,
-  Point = 1,
-  Line = 2,
-  Area = 3
-};
+The v1 proposal follows existing OpenCPN chart-provider extension patterns.
 
-struct PI_VectorPosition {
-  double lat = 0.0;
-  double lon = 0.0;
-};
+1. The consumer API is an exported OpenCPN function.
+2. Native S-57 is implemented directly by OpenCPN core.
+3. Plugin chart providers opt in using new derived `Plus3` chart-base classes.
+4. Existing chart providers remain binary compatible because no virtual method is added to an existing base class.
+5. The DLL boundary uses only versioned POD structures and callbacks.
+6. No STL or wx container owns data across the DLL boundary.
+7. Callback pointers are borrowed only for the duration of the callback.
+8. All coordinates are WGS84 decimal degrees.
+9. Point, line and area objects share one geometry representation.
+10. The API contains no Chart Inspector-specific concepts.
 
-struct PI_VectorGeometryPart {
-  // Index into PI_VectorObject::points.
-  // A line normally has one part. Areas may have one exterior ring and
-  // additional rings. Multi-part objects may contain several parts.
-  uint32_t first_point = 0;
-  uint32_t point_count = 0;
-};
+Current OpenCPN master uses plugin API 1.21. The eventual upstream change should use the next minor API version according to maintainer convention; the working proposal assumes 1.22.
 
-struct PI_VectorAttribute {
-  // S-57/S-101 acronym or provider-neutral attribute identifier.
-  // Examples: "OBJNAM", "COLOUR", "LITCHR".
-  std::string name;
-  std::string value;
-};
-
-struct PI_VectorObject {
-  // Provider object class identifier, e.g. "BOYLAT", "RESARE", "FAIRWY".
-  std::string feature_class;
-
-  // Human-readable object name when supplied by the chart.
-  std::string object_name;
-
-  PI_VectorGeometryType geometry_type = PI_VectorGeometryType::Unknown;
-
-  // Fully copied geographic geometry. No pointer references provider memory.
-  std::vector<PI_VectorPosition> points;
-  std::vector<PI_VectorGeometryPart> parts;
-
-  // Fully copied raw attributes. Decoding remains a consumer responsibility.
-  std::vector<PI_VectorAttribute> attributes;
-};
-```
-
-## Query
+## Public ABI
 
 ```cpp
-struct PI_VectorObjectQuery {
-  double lat = 0.0;
-  double lon = 0.0;
-
-  // Search envelope in screen pixels. The provider/core may use this to
-  // reduce candidate enumeration. It is not a request to perform the final
-  // pixel-distance hit test.
-  double search_radius_pixels = 8.0;
-
-  // Optional comma-separated exact/wildcard filter. Empty means all classes.
-  // Example: "BOY*,BCN*,LIGHTS,RESARE".
-  std::string feature_filter;
+enum PI_VectorGeometryTypeV1 : uint32_t {
+  PI_VECTOR_GEOMETRY_UNKNOWN_V1 = 0,
+  PI_VECTOR_GEOMETRY_POINT_V1 = 1,
+  PI_VECTOR_GEOMETRY_LINE_V1 = 2,
+  PI_VECTOR_GEOMETRY_AREA_V1 = 3
 };
 
-// Returns candidate vector objects close enough to the query position to be
-// useful to an interactive consumer. Returned objects and all nested data are
-// owned by the caller.
-DECL_IMP bool GetVectorChartObjects(
+struct PI_VectorQueryV1 {
+  uint32_t struct_size;
+  double lat;
+  double lon;
+  double search_radius_pixels;
+};
+
+struct PI_VectorPositionV1 {
+  double lat;
+  double lon;
+};
+
+struct PI_VectorPartV1 {
+  uint32_t first_point;
+  uint32_t point_count;
+};
+
+struct PI_VectorAttributeV1 {
+  const char* name_utf8;
+  const char* value_utf8;
+};
+
+struct PI_VectorObjectV1 {
+  uint32_t struct_size;
+  uint32_t geometry_type;
+  const char* feature_class_utf8;
+  const char* object_name_utf8;
+  const PI_VectorPositionV1* points;
+  uint32_t point_count;
+  const PI_VectorPartV1* parts;
+  uint32_t part_count;
+  const PI_VectorAttributeV1* attributes;
+  uint32_t attribute_count;
+};
+
+typedef bool (*PI_VectorObjectSinkV1)(
+    const PI_VectorObjectV1* object,
+    void* user_data);
+
+DECL_IMP bool QueryVectorChartObjectsV1(
     int canvas_index,
-    const PI_VectorObjectQuery& query,
-    std::vector<PI_VectorObject>* objects);
+    const PI_VectorQueryV1* query,
+    PI_VectorObjectSinkV1 sink,
+    void* user_data);
 ```
 
-`GetVectorChartObjects()` is the only function Chart Inspector needs from the OpenCPN side.
+`search_radius_pixels` is only a candidate-enumeration hint. The API does not choose the winning object for the UI.
 
-## Provider side
+## Provider extension
 
-For native S-57 charts OpenCPN populates `PI_VectorObject` directly from its internal chart model.
+OpenCPN already discovers optional chart-provider capabilities using derived chart-base classes and `dynamic_cast`. v1 extends the same pattern rather than modifying existing vtables.
 
-Plugin chart providers get one optional extension point. The exact ABI mechanism should follow OpenCPN maintainer preference, but its semantic contract is deliberately small:
+Two provider families are supported because OpenCPN already has both GL and Extended chart-provider hierarchies:
 
 ```cpp
-class PlugInVectorObjectProvider {
+class DECL_EXP PlugInChartBaseGLPlus3 : public PlugInChartBaseGLPlus2 {
 public:
-  virtual ~PlugInVectorObjectProvider() = default;
+  PlugInChartBaseGLPlus3();
+  virtual ~PlugInChartBaseGLPlus3();
 
-  virtual bool GetVectorObjects(
-      const PI_VectorObjectQuery& query,
-      const PlugIn_ViewPort& viewport,
-      std::vector<PI_VectorObject>* objects) = 0;
+  virtual bool QueryVectorObjectsV1(
+      const PI_VectorQueryV1* query,
+      const PlugIn_ViewPort* viewport,
+      PI_VectorObjectSinkV1 sink,
+      void* user_data);
+};
+
+class DECL_EXP PlugInChartBaseExtendedPlus3
+    : public PlugInChartBaseExtendedPlus2 {
+public:
+  PlugInChartBaseExtendedPlus3();
+  virtual ~PlugInChartBaseExtendedPlus3();
+
+  virtual bool QueryVectorObjectsV1(
+      const PI_VectorQueryV1* query,
+      const PlugIn_ViewPort* viewport,
+      PI_VectorObjectSinkV1 sink,
+      void* user_data);
 };
 ```
 
-Important: the provider returns copied geographic geometry, not rendering buffers or opaque handles.
+Default implementations return `false`. Existing providers which remain on Plus2 are unaffected.
 
-If adding an optional C++ interface is considered too risky for the existing plugin ABI, the same contract can be exposed using a versioned C callback/extension registration mechanism. The data model above should stay unchanged.
+## Ownership and safety
 
-## Ownership
+All pointers supplied to `PI_VectorObjectSinkV1` are valid only until that callback returns. Consumers must copy any data they retain.
 
-All returned strings, vectors, positions, parts and attributes are owned by the caller after the query returns.
+Forbidden across the ABI boundary:
 
-No returned value may contain:
-
-- `S57Obj*`
-- `PI_S57Obj*`
+- `std::vector` / `std::string`
+- wx containers / `wxString`
+- `S57Obj*` / `PI_S57Obj*`
 - `ObjRazRules*`
 - `chart_context*`
-- VBO offsets
-- render-rule pointers
-- provider-owned geometry pointers
+- VBO pointers or offsets
+- provider-specific handles
 
-This is the central safety requirement.
+Providers may use these internally while preparing one callback invocation.
+
+Core should validate provider output and enforce defensive limits before forwarding it to ordinary plugins. Initial working limits are 256 candidates/query, 16384 points/object, 1024 parts/object, 512 attributes/object and 8192 UTF-8 bytes/string.
 
 ## Geometry semantics
 
 ### Point
 
-`geometry_type == Point`
+`geometry_type == PI_VECTOR_GEOMETRY_POINT_V1`.
 
-`points` normally contains one position. `parts` may be empty.
+Normally one point and no parts.
 
 ### Line
 
-`geometry_type == Line`
-
-`points` contains ordered vertices. Each `parts` entry identifies one independent polyline.
+One or more parts reference contiguous ranges in `points`. Parts are not implicitly closed.
 
 ### Area
 
-`geometry_type == Area`
+One or more parts represent rings. Rings are implicitly closed; the first point does not have to be duplicated at the end. v1 deliberately does not encode exterior/hole roles.
 
-Each part is a ring. The API does not require a winding convention for the first version. Providers should preserve their source order. A later API revision may add explicit exterior/hole roles if required.
+## Candidate versus hit test
 
-For Chart Inspector, area selection is performed against ring boundaries, not by testing whether the cursor lies anywhere inside the polygon.
+The core/provider returns nearby candidates and their true geographic geometry. The consuming plugin performs final screen-space hit testing:
 
-## Hit testing belongs to the consumer
+- point: distance to point anchor,
+- line: minimum point-to-segment distance,
+- area: minimum point-to-ring-boundary distance.
 
-OpenCPN/provider supplies candidates and geometry. Chart Inspector calculates the final screen-space distance using the active viewport:
-
-- Point: cursor to point/symbol anchor.
-- Line: minimum cursor-to-segment distance.
-- Area: minimum cursor-to-ring-segment distance.
-
-This keeps interaction policy outside the core and prevents a Chart Inspector-specific API.
-
-## Candidate selection
-
-The core/provider should return a small candidate set around the query position. It should not decide which object is the UI winner.
-
-Chart Inspector can then rank candidates using:
-
-1. actual pixel distance,
-2. geometry type / navigational relevance,
-3. display priority if such metadata is added later,
-4. configured class filter.
-
-The initial API deliberately does not expose S-52 rendering internals.
+This is important for generality: OpenCPN does not gain Chart Inspector-specific selection rules.
 
 ## Attributes
 
-The API returns raw chart attributes as key/value strings. Examples:
+Attributes are raw UTF-8 name/value pairs, for example:
 
 ```text
-OBJNAM=Nord cardinal buoy
+OBJNAM=...
 COLOUR=2,6
 LITCHR=4
 SIGGRP=(3)
 SIGPER=10
 ```
 
-Chart Inspector continues to decode these using the official S-57 catalogue. This prevents OpenCPN core from becoming responsible for Chart Inspector presentation strings.
+Presentation and catalogue decoding stay in the consumer.
 
-## Scope deliberately excluded from v1
+## Deliberately excluded from v1
 
-- Depth soundings / multipoint sounding arrays.
-- Raster charts.
-- S-52 symbol geometry.
-- Text-label bounding boxes.
-- Highlight colours or drawing instructions.
-- UI strings.
-- Provider-specific opaque identifiers.
-- Editing chart data.
+- raster charts,
+- UI strings,
+- highlight colours,
+- S-52 symbol geometry,
+- text-label bounds,
+- editing chart data,
+- provider-specific opaque identifiers,
+- Chart Inspector feature priorities,
+- depth-sounding special handling.
 
-These can be considered separately if real use cases appear.
+## Reference implementations
 
-## Chart Inspector defaults
+The upstream proposal should contain native S-57 support in OpenCPN core. o-charts is the first external provider reference because its `eSENCChart` already owns the necessary S-57 object structures and candidate-query logic internally.
 
-Chart Inspector will normally suppress low-value inspection targets such as individual soundings, depth areas/contours and chart metadata. This is a Chart Inspector policy and is not encoded in the OpenCPN API.
+The final data path is:
 
-## Why this replaces the V1-V5 prototype exports
+```text
+ordinary plugin
+    |
+    v
+QueryVectorChartObjectsV1()
+    |
+    +-- native S-57 -> OpenCPN converts internal S57Obj
+    |
+    +-- plugin chart wrapper
+            |
+            +-- GLPlus3 provider
+            |
+            +-- ExtendedPlus3 provider (o-charts)
+```
 
-The experimental `OCPNChartInspectorHitTestV*` exports mixed candidate discovery, hit testing, provider internals and Chart Inspector policy. They proved the interaction concept but are not suitable as a public API.
+Chart Inspector therefore never needs to know whether the active ENC is native or supplied by o-charts.
 
-The proposed API has one responsibility:
+## Upstream implementation sequence
 
-> Return safe, copied vector object data and geographic geometry near a requested position.
+1. Develop against current OpenCPN master, not the old private Chart Inspector hit-test patches.
+2. Add API 1.22 POD declarations, callback and Plus3 provider classes.
+3. Add `QueryVectorChartObjectsV1()` with native S-57 conversion.
+4. Add provider dispatch with both Plus3 hierarchies.
+5. Add focused OpenCPN tests for ABI validation and malformed provider results where practical.
+6. Implement ExtendedPlus3 in an o-charts development branch.
+7. Test Point, Line, Area and multipart geometry on the same ENC positions against OpenCPN's existing object query.
+8. Switch Chart Inspector to the public API.
+9. Remove the private `OCPNChartInspectorHitTestV*` prototype path.
+10. Prepare an OpenCPN PR containing only generic API/core code and tests; keep Chart Inspector and o-charts changes in separate PRs.
 
-Everything else stays outside the core.
+## Upstream PR framing
 
-## Proposed implementation sequence
+The problem statement for OpenCPN should be generic:
 
-1. Add public data types and `GetVectorChartObjects()` to the OpenCPN plugin API on an experimental branch.
-2. Implement native S-57 conversion in OpenCPN.
-3. Add the optional provider extension mechanism.
-4. Implement the provider extension in o-charts using its internal `S57Obj` geometry while copying all output.
-5. Switch Chart Inspector from the private V5 export to `GetVectorChartObjects()`.
-6. Test point, line, area and multi-part objects under Day/Dusk/Night and multiple zoom levels.
-7. Remove the private `OCPNChartInspectorHitTestV*` prototype code.
-8. Prepare an upstream OpenCPN proposal/PR with the generic API independent of Chart Inspector UI.
+> Plugins currently cannot safely query geometry and raw attributes for arbitrary nearby vector-chart objects independent of the active chart provider. This API adds a versioned, ABI-safe enumeration mechanism while preserving provider and consumer binary compatibility.
+
+Chart Inspector is a motivating consumer and test client, not part of the OpenCPN API contract.
