@@ -19,11 +19,27 @@ enum PI_VectorGeometryTypeV1 : uint32_t {
   PI_VECTOR_GEOMETRY_AREA_V1 = 3
 };
 
+enum PI_VectorQueryGeometryMaskV1 : uint32_t {
+  PI_VECTOR_QUERY_GEOMETRY_POINT_V1 = 1u << 0,
+  PI_VECTOR_QUERY_GEOMETRY_LINE_V1 = 1u << 1,
+  PI_VECTOR_QUERY_GEOMETRY_AREA_V1 = 1u << 2,
+  PI_VECTOR_QUERY_GEOMETRY_ALL_V1 = 0x7u
+};
+
+enum PI_VectorQueryFlagsV1 : uint32_t {
+  PI_VECTOR_QUERY_SKIP_ATTRIBUTES_V1 = 1u << 0
+};
+
 struct PI_VectorQueryV1 {
   uint32_t struct_size;
   double lat;
   double lon;
   double search_radius_pixels;
+  uint32_t flags;
+  uint32_t geometry_mask;
+  uint32_t max_objects;
+  uint32_t max_points_per_object;
+  const char *exclude_feature_classes_utf8;
 };
 
 struct PI_VectorPositionV1 {
@@ -129,7 +145,7 @@ public:
           GetProcAddress(host, "QueryVectorChartObjectsV1"));
     }
 #endif
-    wxLogMessage("VECTORQUERY_TEST init api=%s",
+    wxLogMessage("VECTORQUERY_TEST init api=%s mode=interactive",
                  m_query ? "available" : "missing");
     return WANTS_MOUSE_EVENTS | WANTS_CURSOR_LATLON;
   }
@@ -142,7 +158,7 @@ public:
   int GetAPIVersionMajor() override { return 1; }
   int GetAPIVersionMinor() override { return 18; }
   int GetPlugInVersionMajor() override { return 0; }
-  int GetPlugInVersionMinor() override { return 1; }
+  int GetPlugInVersionMinor() override { return 2; }
   int GetToolbarToolCount() override { return 0; }
 
   wxBitmap *GetPlugInBitmap() override { return &m_bitmap; }
@@ -151,7 +167,7 @@ public:
     return "Diagnostic consumer for QueryVectorChartObjectsV1";
   }
   wxString GetLongDescription() override {
-    return "Logs vector chart candidates and attributes on left click.";
+    return "Logs bounded interactive vector chart candidates on left click.";
   }
 
   void SetCursorLatLon(double lat, double lon) override {
@@ -163,17 +179,26 @@ public:
   bool MouseEventHook(wxMouseEvent &event) override {
     if (!event.LeftDown() || !m_query || !m_have_position) return false;
 
+    static const char kExcludedFeatures[] =
+        "LNDARE,COALNE,DEPARE,DEPCNT";
+
     PI_VectorQueryV1 query{};
     query.struct_size = sizeof(query);
     query.lat = m_lat;
     query.lon = m_lon;
     query.search_radius_pixels = 12.0;
+    query.flags = PI_VECTOR_QUERY_SKIP_ATTRIBUTES_V1;
+    query.geometry_mask = PI_VECTOR_QUERY_GEOMETRY_ALL_V1;
+    query.max_objects = 8;
+    query.max_points_per_object = 50;
+    query.exclude_feature_classes_utf8 = kExcludedFeatures;
 
     QueryResultCounter counter;
     const bool ok = m_query(0, &query, LogObject, &counter);
     wxLogMessage(
-        "VECTORQUERY_TEST query lat=%.8f lon=%.8f ok=%d candidates=%d",
-        m_lat, m_lon, ok ? 1 : 0, counter.count);
+        "VECTORQUERY_TEST query lat=%.8f lon=%.8f ok=%d candidates=%d mode=interactive max_objects=8 max_points=50 exclude=%s",
+        m_lat, m_lon, ok ? 1 : 0, counter.count,
+        wxString::FromUTF8(kExcludedFeatures));
     return false;
   }
 
