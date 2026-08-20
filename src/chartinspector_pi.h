@@ -1,6 +1,8 @@
 #ifndef CHARTINSPECTOR_PI_H
 #define CHARTINSPECTOR_PI_H
 
+#include <vector>
+
 #include <wx/wx.h>
 
 #include "ocpn_plugin.h"
@@ -61,14 +63,25 @@ private:
                                int attributesSize, int *primitiveType,
                                double *markerLat, double *markerLon);
 
+  struct HoverPosition {
+    double lat = 0.0;
+    double lon = 0.0;
+  };
+  struct HoverPart {
+    unsigned int firstPoint = 0;
+    unsigned int pointCount = 0;
+  };
+
   void BuildToolbarBitmaps();
   void UpdateToolbarVisual();
   void ApplyInfoTheme();
   void LoadConfig();
   void SaveConfig();
   void ClearHover();
+  void ClearHoverGeometry();
   bool IsFeatureEnabled(const wxString &feature) const;
   void UpdateHoverObject();
+  void UpdateHoverGeometry(bool force = false);
   void QueryAssociatedLight();
   void BuildInfoPanel(wxWindow *canvas);
   void BuildVisualSummary();
@@ -83,10 +96,12 @@ private:
   wxBitmap m_toolbarEnabledBitmap;
   wxBitmap m_toolbarDisabledBitmap;
   wxPoint m_mousePosition;
+  wxPoint m_lastHoverQueryPosition;
   double m_cursorLat = 0.0;
   double m_cursorLon = 0.0;
   bool m_hasMousePosition = false;
   bool m_hasCursorPosition = false;
+  long long m_lastHoverQueryMs = 0;
 
   wxString m_lastFeature;
   wxString m_lastObjectName;
@@ -97,6 +112,12 @@ private:
   int m_lastPrimitiveType = 1;  // 1 point, 2 line, 3 area
   bool m_hasVectorObject = false;
   bool m_hasAssociatedLight = false;
+
+  std::vector<HoverPosition> m_hoverPoints;
+  std::vector<HoverPart> m_hoverParts;
+  int m_hoverGeometryType = 0;  // 1 point, 2 line, 3 area
+  wxString m_hoverFeature;
+  bool m_hasHoverGeometry = false;
 
   wxPanel *m_infoPanel = nullptr;
   wxStaticText *m_infoTitle = nullptr;
