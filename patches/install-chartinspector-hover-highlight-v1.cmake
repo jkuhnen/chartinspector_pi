@@ -32,11 +32,13 @@ using CI_QueryVectorV1 = bool (*)(int, const CI_VectorQueryV1 *, CI_VectorSinkV1
 constexpr uint32_t CI_SKIP_ATTRIBUTES = 1u;
 constexpr uint32_t CI_GEOMETRY_ALL = 7u;
 
+struct CI_HoverPosition { double lat = 0.0; double lon = 0.0; };
+struct CI_HoverPart { unsigned int firstPoint = 0; unsigned int pointCount = 0; };
 struct CI_HoverCandidate {
   uint32_t geometry = 0;
   wxString feature;
-  std::vector<ChartInspectorPi::HoverPosition> points;
-  std::vector<ChartInspectorPi::HoverPart> parts;
+  std::vector<CI_HoverPosition> points;
+  std::vector<CI_HoverPart> parts;
   int score = -100000;
 };
 
@@ -106,7 +108,10 @@ void ChartInspectorPi::UpdateHoverGeometry(bool force) {
   queryFn(0, &q, CI_CollectHover, &best);
   m_lastHoverQueryMs = now; m_lastHoverQueryPosition = m_mousePosition;
   if (best.points.empty()) { ClearHoverGeometry(); return; }
-  m_hoverPoints = best.points; m_hoverParts = best.parts;
+  m_hoverPoints.clear();
+  m_hoverParts.clear();
+  for (const auto &p : best.points) m_hoverPoints.push_back({p.lat, p.lon});
+  for (const auto &part : best.parts) m_hoverParts.push_back({part.firstPoint, part.pointCount});
   m_hoverGeometryType = static_cast<int>(best.geometry); m_hoverFeature = best.feature;
   m_hasHoverGeometry = true;
 #else
@@ -121,7 +126,9 @@ bool ChartInspectorPi::MouseEventHook(wxMouseEvent &event) {
   if (event.LeftDown()) UpdateHoverObject();
 ]===])
 string(FIND "${C}" "${MOUSE_OLD}" MP)
-if(MP EQUAL -1) message(FATAL_ERROR "MouseEventHook anchor not found") endif()
+if(MP EQUAL -1)
+  message(FATAL_ERROR "MouseEventHook anchor not found")
+endif()
 string(REPLACE "${MOUSE_OLD}" "${MOUSE_NEW}" C "${C}")
 
 set(RENDER_OLD [===[
@@ -149,7 +156,7 @@ bool ChartInspectorPi::RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp) {
         for (const auto &part : m_hoverParts) {
           if (part.pointCount < 2 || part.firstPoint >= m_hoverPoints.size()) continue;
           std::vector<wxPoint> pix;
-          const unsigned int end = std::min<unsigned int>(part.firstPoint + part.pointCount, m_hoverPoints.size());
+          const unsigned int end = std::min<unsigned int>(part.firstPoint + part.pointCount, static_cast<unsigned int>(m_hoverPoints.size()));
           for (unsigned int i = part.firstPoint; i < end; ++i) {
             wxPoint p; GetCanvasPixLL(vp, &p, m_hoverPoints[i].lat, m_hoverPoints[i].lon); pix.push_back(p);
           }
@@ -167,10 +174,11 @@ bool ChartInspectorPi::RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp) {
 }
 ]===])
 string(FIND "${C}" "${RENDER_OLD}" RP)
-if(RP EQUAL -1) message(FATAL_ERROR "RenderOverlay anchor not found") endif()
+if(RP EQUAL -1)
+  message(FATAL_ERROR "RenderOverlay anchor not found")
+endif()
 string(REPLACE "${RENDER_OLD}" "${RENDER_NEW}" C "${C}")
 
-# In GL mode draw the same geometry as a two-pass cyan glow.
 set(GL_POINT [===[
   wxPoint p;
   GetCanvasPixLL(vp, &p, m_lastObjectLat, m_lastObjectLon);
@@ -196,7 +204,7 @@ set(GL_GEOM [===[
     } else if (m_hasHoverGeometry) {
       for (const auto &part : m_hoverParts) {
         if (part.pointCount < 2 || part.firstPoint >= m_hoverPoints.size()) continue;
-        const unsigned int end = std::min<unsigned int>(part.firstPoint + part.pointCount, m_hoverPoints.size());
+        const unsigned int end = std::min<unsigned int>(part.firstPoint + part.pointCount, static_cast<unsigned int>(m_hoverPoints.size()));
         glBegin(GL_LINE_STRIP);
         for (unsigned int i = part.firstPoint; i < end; ++i) { wxPoint p; GetCanvasPixLL(vp, &p, m_hoverPoints[i].lat, m_hoverPoints[i].lon); glVertex2f((float)p.x, (float)p.y); }
         glEnd();
@@ -212,7 +220,9 @@ set(GL_GEOM [===[
   }
 ]===])
 string(FIND "${C}" "${GL_POINT}" GP)
-if(GP EQUAL -1) message(FATAL_ERROR "GL highlight anchor not found") endif()
+if(GP EQUAL -1)
+  message(FATAL_ERROR "GL highlight anchor not found")
+endif()
 string(REPLACE "${GL_POINT}" "${GL_GEOM}" C "${C}")
 string(REPLACE "if (!m_enabled || !m_hasVectorObject) return true;" "if (!m_enabled || (!m_hasVectorObject && !m_hasHoverGeometry)) return true;" C "${C}")
 
