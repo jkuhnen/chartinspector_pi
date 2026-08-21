@@ -62,8 +62,10 @@ add_non_rendered_flag("${OCHARTS_API17}")
 # in the provider's razRules.
 #
 # eSENCChart.cpp currently contains two QueryVectorObjectsV1 implementations in
-# separate compilation regions. The replacements below intentionally update all
-# matching provider bodies so the two paths stay synchronized.
+# separate compilation regions. The insertion below matches query_flags in both
+# provider bodies. The render-check replacements additionally include
+# query->lat in their anchors, so they cannot touch the older
+# GetObjRuleListAtLatLon selection code elsewhere in this file.
 # -----------------------------------------------------------------------------
 file(READ "${OCHARTS_CPP}" C)
 
@@ -83,18 +85,49 @@ if(NOT C MATCHES "VECTOR_QUERY_INCLUDE_NON_RENDERED_V1")
   };
 ]===])
 
-  string(FIND "${C}" "${FLAGS}" POS)
-  if(POS EQUAL -1)
+  string(FIND "${C}" "${FLAGS}" FLAGS_POS)
+  if(FLAGS_POS EQUAL -1)
     message(FATAL_ERROR "Could not locate query_flags in ${OCHARTS_CPP}")
   endif()
   string(REPLACE "${FLAGS}" "${FLAGS_NEW}" C "${C}")
 
-  # All selection checks inside the vector-query provider use one of these
-  # forms. Restrict replacements to the exact expressions used by the provider.
-  string(REPLACE "ps52plib->ObjectRenderCheck(top) &&"
-                 "rule_is_queryable(top) &&" C "${C}")
-  string(REPLACE "ps52plib->ObjectRenderCheck(child) &&"
-                 "rule_is_queryable(child) &&" C "${C}")
+  set(TOP_RENDER [===[
+ps52plib->ObjectRenderCheck(top) &&
+          DoesLatLonSelectObject(static_cast<float>(query->lat),
+]===])
+  set(TOP_QUERY [===[
+rule_is_queryable(top) &&
+          DoesLatLonSelectObject(static_cast<float>(query->lat),
+]===])
+  set(CHILD_RENDER [===[
+ps52plib->ObjectRenderCheck(child) &&
+            DoesLatLonSelectObject(static_cast<float>(query->lat),
+]===])
+  set(CHILD_QUERY [===[
+rule_is_queryable(child) &&
+            DoesLatLonSelectObject(static_cast<float>(query->lat),
+]===])
+
+  string(FIND "${C}" "${TOP_RENDER}" TOP_POS)
+  if(TOP_POS EQUAL -1)
+    message(FATAL_ERROR "Could not locate provider top-level ObjectRenderCheck")
+  endif()
+  string(REPLACE "${TOP_RENDER}" "${TOP_QUERY}" C "${C}")
+
+  string(FIND "${C}" "${CHILD_RENDER}" CHILD_POS)
+  if(CHILD_POS EQUAL -1)
+    message(FATAL_ERROR "Could not locate provider child ObjectRenderCheck")
+  endif()
+  string(REPLACE "${CHILD_RENDER}" "${CHILD_QUERY}" C "${C}")
+
+  # Guard against an incomplete provider conversion. Any remaining render check
+  # immediately followed by query->lat would still suppress non-rendered
+  # candidates in QueryVectorObjectsV1.
+  string(FIND "${C}" "ObjectRenderCheck(top) &&\n          DoesLatLonSelectObject(static_cast<float>(query->lat)" LEFT_TOP)
+  string(FIND "${C}" "ObjectRenderCheck(child) &&\n            DoesLatLonSelectObject(static_cast<float>(query->lat)" LEFT_CHILD)
+  if(NOT LEFT_TOP EQUAL -1 OR NOT LEFT_CHILD EQUAL -1)
+    message(FATAL_ERROR "Not all QueryVectorObjectsV1 render checks were converted")
+  endif()
 
   file(WRITE "${OCHARTS_CPP}" "${C}")
   message(STATUS "Enabled INCLUDE_NON_RENDERED selection in both o-charts provider paths")
@@ -110,19 +143,29 @@ file(READ "${INSPECTOR_CPP}" P)
 
 if(P MATCHES "CHARTINSPECTOR_VECTOR_HOVER_V1")
   if(NOT P MATCHES "CI_INCLUDE_NON_RENDERED")
-    string(REPLACE
-      "constexpr uint32_t CI_SKIP_ATTRIBUTES = 1u;\nconstexpr uint32_t CI_GEOMETRY_ALL = 7u;"
-      "constexpr uint32_t CI_SKIP_ATTRIBUTES = 1u;\nconstexpr uint32_t CI_INCLUDE_NON_RENDERED = 1u << 1;\nconstexpr uint32_t CI_GEOMETRY_ALL = 7u;"
-      P "${P}")
-
-    string(REPLACE
-      "q.flags = CI_SKIP_ATTRIBUTES; q.geometry_mask = CI_GEOMETRY_ALL;"
-      "q.flags = CI_SKIP_ATTRIBUTES | CI_INCLUDE_NON_RENDERED; q.geometry_mask = CI_GEOMETRY_ALL;"
-      P "${P}")
-
-    if(NOT P MATCHES "CI_INCLUDE_NON_RENDERED")
-      message(FATAL_ERROR "Could not enable non-rendered flag in Chart Inspector hover query")
+    set(CI_FLAGS_OLD [===[
+constexpr uint32_t CI_SKIP_ATTRIBUTES = 1u;
+constexpr uint32_t CI_GEOMETRY_ALL = 7u;
+]===])
+    set(CI_FLAGS_NEW [===[
+constexpr uint32_t CI_SKIP_ATTRIBUTES = 1u;
+constexpr uint32_t CI_INCLUDE_NON_RENDERED = 1u << 1;
+constexpr uint32_t CI_GEOMETRY_ALL = 7u;
+]===])
+    string(FIND "${P}" "${CI_FLAGS_OLD}" CI_FLAGS_POS)
+    if(CI_FLAGS_POS EQUAL -1)
+      message(FATAL_ERROR "Could not locate Chart Inspector hover flag constants")
     endif()
+    string(REPLACE "${CI_FLAGS_OLD}" "${CI_FLAGS_NEW}" P "${P}")
+
+    set(CI_QUERY_OLD "q.flags = CI_SKIP_ATTRIBUTES; q.geometry_mask = CI_GEOMETRY_ALL;")
+    set(CI_QUERY_NEW "q.flags = CI_SKIP_ATTRIBUTES | CI_INCLUDE_NON_RENDERED; q.geometry_mask = CI_GEOMETRY_ALL;")
+    string(FIND "${P}" "${CI_QUERY_OLD}" CI_QUERY_POS)
+    if(CI_QUERY_POS EQUAL -1)
+      message(FATAL_ERROR "Could not locate Chart Inspector hover query flags")
+    endif()
+    string(REPLACE "${CI_QUERY_OLD}" "${CI_QUERY_NEW}" P "${P}")
+
     file(WRITE "${INSPECTOR_CPP}" "${P}")
     message(STATUS "Chart Inspector hover query now includes non-rendered objects")
   else()
