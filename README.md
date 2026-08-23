@@ -8,7 +8,7 @@ Move the pointer over a chart feature and Chart Inspector highlights the selecte
 
 ## Preview
 
-![Chart Inspector highlighting a west cardinal buoy](docs/images/chart-inspector-cardinal-buoy.png)
+![Chart Inspector highlighting a west cardinal buoy](docs/images/cardinal_preview_optimized.png)
 
 ▶ **[Watch the short Chart Inspector demo](https://youtu.be/ziPwUMbQ6nQ)**
 
