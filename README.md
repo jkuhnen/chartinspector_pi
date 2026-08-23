@@ -17,15 +17,7 @@ Replace this comment with:
 Recommended image: one strong screenshot, preferably the underwater rock/depth example.
 -->
 
-<!--
-DEMO VIDEO
-Replace this comment with something like:
-
-[Watch the short Chart Inspector demo](VIDEO_URL)
-
-Recommended video: 10-20 seconds, no voice-over required. Show the pointer moving between
-2-3 objects, the cyan highlight following the exact geometry, and the information card updating.
--->
+▶ **[Watch the short Chart Inspector demo](https://youtu.be/nw6_YnLXevw)**
 
 ## Why
 
