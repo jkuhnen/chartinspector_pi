@@ -8,16 +8,9 @@ Move the pointer over a chart feature and Chart Inspector highlights the selecte
 
 ## Preview
 
-<!--
-PREVIEW SCREENSHOT
-Replace this comment with:
+![Chart Inspector highlighting a west cardinal buoy](docs/images/chart-inspector-cardinal-buoy.png)
 
-![Chart Inspector highlighting a vector chart object](docs/images/chart-inspector-preview.png)
-
-Recommended image: one strong screenshot, preferably the underwater rock/depth example.
--->
-
-▶ **[Watch the short Chart Inspector demo](https://youtu.be/nw6_YnLXevw)**
+▶ **[Watch the short Chart Inspector demo](https://youtu.be/ziPwUMbQ6nQ)**
 
 ## Why
 
