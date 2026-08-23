@@ -6,6 +6,27 @@ Move the pointer over a chart feature and Chart Inspector highlights the selecte
 
 > **Status:** 0.3.0 preview. The plugin is functional and currently being tested with vector charts and o-charts. It depends on an experimental read-only vector-object query extension which is being prepared as a generic OpenCPN API proposal.
 
+## Preview
+
+<!--
+PREVIEW SCREENSHOT
+Replace this comment with:
+
+![Chart Inspector highlighting a vector chart object](docs/images/chart-inspector-preview.png)
+
+Recommended image: one strong screenshot, preferably the underwater rock/depth example.
+-->
+
+<!--
+DEMO VIDEO
+Replace this comment with something like:
+
+[Watch the short Chart Inspector demo](VIDEO_URL)
+
+Recommended video: 10-20 seconds, no voice-over required. Show the pointer moving between
+2-3 objects, the cyan highlight following the exact geometry, and the information card updating.
+-->
+
 ## Why
 
 Vector charts contain much more information than can be displayed at once. OpenCPN can expose these attributes through its existing object-query workflow, but identifying the exact feature under the pointer can be slower than necessary.
@@ -128,6 +149,10 @@ The preview currently builds against OpenCPN plugin API 1.18 and wxWidgets. The 
 ## Contributing
 
 Testing with different vector chart sources and platforms is especially useful. Reports about wrong object selection, incomplete geometry, missing navigation attributes or UI issues in Day/Dusk/Night modes are welcome.
+
+## Development note
+
+Parts of the implementation and documentation were developed with AI-assisted coding. All changes are reviewed, built and tested by the maintainer before being committed.
 
 ## License
 
