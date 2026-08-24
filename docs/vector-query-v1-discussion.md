@@ -1,6 +1,6 @@
-# Vector object query API v1 — discussion draft
+# Vector object query API v1 —  draft
 
-This is a small discussion draft for a possible OpenCPN plugin API.
+This is a draft for a possible OpenCPN plugin API.
 
 The goal is simple: allow a plugin to ask OpenCPN which vector chart objects are near a given position and get back their class, attributes and geographic geometry.
 
