@@ -46,10 +46,25 @@ void DrawCardinal(wxDC &dc, int x, int y, int catcam,
   else if (catcam == 4) { down(y); up(y + 8); }
 }
 
+wxString Ellipsize(wxDC &dc, const wxString &text, int maxWidth) {
+  if (text.IsEmpty()) return text;
+  wxCoord w = 0, h = 0;
+  dc.GetTextExtent(text, &w, &h);
+  if (w <= maxWidth) return text;
+  wxString out = text;
+  const wxString dots = "...";
+  while (!out.IsEmpty()) {
+    out.RemoveLast();
+    dc.GetTextExtent(out + dots, &w, &h);
+    if (w <= maxWidth) return out + dots;
+  }
+  return dots;
+}
+
 }  // namespace
 
 ObjectInspectorPanel::ObjectInspectorPanel(wxWindow *parent)
-    : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(370, 460), wxBORDER_NONE) {
+    : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(370, 390), wxBORDER_NONE) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   Bind(wxEVT_PAINT, &ObjectInspectorPanel::OnPaint, this);
   Bind(wxEVT_LEFT_DOWN, &ObjectInspectorPanel::OnLeftDown, this);
@@ -74,20 +89,20 @@ void ObjectInspectorPanel::SetCloseHandler(const std::function<void()> &handler)
 }
 
 void ObjectInspectorPanel::RecalculateSize() {
-  int h = 260;
-  if (!m_data.cardinalLabel.IsEmpty()) h += 58;
-  if (!m_data.lightSummary.IsEmpty()) h += 74;
-  if (!m_data.primaryValue.IsEmpty()) h += 62;
+  int h = 142;
+  if (!m_data.cardinalLabel.IsEmpty()) h += 62;
+  if (!m_data.lightSummary.IsEmpty()) h += 68;
+  if (!m_data.primaryValue.IsEmpty()) h += 58;
   h += static_cast<int>(m_data.properties.size()) * 25;
-  if (m_data.scaleHidden) h += 30;
-  h += 50;
+  if (m_data.scaleHidden) h += 28;
+  h += 58;
   if (m_technicalExpanded && !m_data.technical.IsEmpty()) {
     int lines = 1;
     for (size_t i = 0; i < m_data.technical.length(); ++i)
       if (m_data.technical[i] == '\n') ++lines;
-    h += lines * 22 + 10;
+    h += lines * 22 + 8;
   }
-  h = wxMax(330, wxMin(680, h));
+  h = wxMax(245, wxMin(650, h));
   SetSize(wxSize(370, h));
   SetMinSize(wxSize(370, h));
 }
@@ -123,58 +138,66 @@ void ObjectInspectorPanel::OnPaint(wxPaintEvent &) {
   dc.DrawLine(w - 24, 12, w - 14, 22);
   dc.DrawLine(w - 14, 12, w - 24, 22);
 
-  int y = 54;
-  DrawText(dc, m_data.title, 18, y, title, p.textPrimary);
-  y += 29;
+  int y = 55;
+  dc.SetFont(title);
+  DrawText(dc, Ellipsize(dc, m_data.title, w - 36), 18, y, title, p.textPrimary);
+  y += 28;
   if (!m_data.objectName.IsEmpty()) {
-    DrawText(dc, m_data.objectName, 18, y, value, p.textPrimary);
-    y += 24;
+    dc.SetFont(value);
+    DrawText(dc, Ellipsize(dc, m_data.objectName, w - 36), 18, y, value,
+             p.textPrimary);
+    y += 23;
   }
   wxString meta = m_data.featureClass;
   if (!m_data.geometry.IsEmpty()) meta += " | " + m_data.geometry;
   DrawText(dc, meta, 18, y, tiny, p.textSecondary);
-  y += 28;
+  y += 27;
   DrawRule(dc, y, w, p.cardBorder);
-  y += 18;
+  y += 17;
 
   if (!m_data.cardinalLabel.IsEmpty()) {
-    DrawCardinal(dc, 32, y + 2, m_data.cardinalCategory, p.textPrimary);
+    DrawCardinal(dc, 32, y + 1, m_data.cardinalCategory, p.textPrimary);
     DrawText(dc, m_data.cardinalLabel, 50, y, value, p.textPrimary);
-    y += 25;
+    y += 24;
     if (!m_data.cardinalColours.IsEmpty())
       DrawText(dc, m_data.cardinalColours, 50, y, label, p.textSecondary);
-    y += 31;
+    y += 30;
   }
 
   if (!m_data.lightSummary.IsEmpty()) {
     DrawText(dc, m_data.lightSummary, 18, y, hero, p.textPrimary);
     if (!m_data.lightRange.IsEmpty())
       DrawText(dc, m_data.lightRange, 238, y + 4, value, p.textPrimary);
-    y += 38;
+    y += 36;
     DrawText(dc, "Light characteristic", 18, y, tiny, p.textSecondary);
     if (!m_data.lightRange.IsEmpty())
       DrawText(dc, "Nominal range", 238, y, tiny, p.textSecondary);
-    y += 28;
+    y += 26;
   }
 
   if (!m_data.primaryValue.IsEmpty()) {
     DrawText(dc, m_data.primaryValue, 18, y, hero, p.textPrimary);
-    y += 34;
+    y += 33;
     DrawText(dc, m_data.primaryLabel, 18, y, tiny, p.textSecondary);
-    y += 28;
+    y += 25;
   }
 
+  const int valueColumn = 150;
+  const int valueWidth = w - valueColumn - 20;
   for (const auto &prop : m_data.properties) {
     if (prop.value.IsEmpty()) continue;
-    DrawText(dc, prop.label, 18, y, tiny, p.textSecondary);
-    int valueX = 150;
+    dc.SetFont(tiny);
+    DrawText(dc, Ellipsize(dc, prop.label, 122), 18, y, tiny, p.textSecondary);
+    int valueX = valueColumn;
     for (const wxColour &c : prop.colours) {
       dc.SetPen(wxPen(p.cardBorder, 1));
       dc.SetBrush(wxBrush(c));
       dc.DrawRectangle(valueX, y - 1, 14, 14);
       valueX += 19;
     }
-    DrawText(dc, prop.value, valueX, y - 1, label, p.textPrimary);
+    dc.SetFont(label);
+    DrawText(dc, Ellipsize(dc, prop.value, valueWidth - (valueX - valueColumn)),
+             valueX, y - 1, label, p.textPrimary);
     y += 25;
   }
 
@@ -183,12 +206,13 @@ void ObjectInspectorPanel::OnPaint(wxPaintEvent &) {
     dc.SetBrush(wxBrush(p.accent));
     dc.DrawCircle(wxPoint(22, y + 7), 3);
     DrawText(dc, "Scale", 36, y, tiny, p.textSecondary);
-    DrawText(dc, "Not shown at current scale", 150, y - 1, label, p.textSecondary);
-    y += 30;
+    DrawText(dc, "Not shown at current scale", valueColumn, y - 1, label,
+             p.textSecondary);
+    y += 28;
   }
 
   DrawRule(dc, y, w, p.cardBorder);
-  y += 8;
+  y += 7;
   m_technicalRect = wxRect(10, y, w - 20, 42);
   if (m_technicalHover) {
     dc.SetPen(*wxTRANSPARENT_PEN);
@@ -205,12 +229,14 @@ void ObjectInspectorPanel::OnPaint(wxPaintEvent &) {
     dc.DrawLine(cx - 2, cy - 4, cx + 2, cy);
     dc.DrawLine(cx + 2, cy, cx - 2, cy + 4);
   }
-  y += 48;
+  y += 47;
 
   if (m_technicalExpanded && !m_data.technical.IsEmpty()) {
     wxStringTokenizer lines(m_data.technical, "\n", wxTOKEN_STRTOK);
     while (lines.HasMoreTokens()) {
-      DrawText(dc, lines.GetNextToken(), 18, y, tiny, p.textSecondary);
+      dc.SetFont(tiny);
+      const wxString line = Ellipsize(dc, lines.GetNextToken(), w - 36);
+      DrawText(dc, line, 18, y, tiny, p.textSecondary);
       y += 22;
     }
   }
