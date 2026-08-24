@@ -98,6 +98,14 @@ private:
   wxColour SignalColour(const wxString &value) const;
   wxString BuildLightSummary(const wxString &attributes) const;
 
+  // The compiled interaction layer keeps the proven implementation available
+  // under legacy names while replacing only the four UI entry points below.
+  // This avoids touching vector-query, hit-test and overlay behaviour.
+  void SetColorSchemeLegacy(PI_ColorScheme cs);
+  bool MouseEventHookLegacy(wxMouseEvent &event);
+  void BuildInfoPanelLegacy(wxWindow *canvas);
+  void ShowObjectPopupLegacy();
+
   wxBitmap m_pluginBitmap;
   wxBitmap m_toolbarEnabledBitmap;
   wxBitmap m_toolbarDisabledBitmap;
