@@ -3,6 +3,7 @@
 
 #include <wx/dcbuffer.h>
 #include <wx/settings.h>
+#include <wx/tokenzr.h>
 
 namespace ci_ui {
 namespace {
@@ -73,21 +74,22 @@ void ObjectInspectorPanel::SetCloseHandler(const std::function<void()> &handler)
 }
 
 void ObjectInspectorPanel::RecalculateSize() {
-  int h = 310;
+  int h = 260;
   if (!m_data.cardinalLabel.IsEmpty()) h += 58;
   if (!m_data.lightSummary.IsEmpty()) h += 74;
+  if (!m_data.primaryValue.IsEmpty()) h += 62;
   h += static_cast<int>(m_data.properties.size()) * 25;
   if (m_data.scaleHidden) h += 30;
   h += 50;
   if (m_technicalExpanded && !m_data.technical.IsEmpty()) {
     int lines = 1;
-    for (wxChar ch : m_data.technical) if (ch == '\n') ++lines;
+    for (size_t i = 0; i < m_data.technical.length(); ++i)
+      if (m_data.technical[i] == '\n') ++lines;
     h += lines * 22 + 10;
   }
-  h = wxMax(360, wxMin(680, h));
+  h = wxMax(330, wxMin(680, h));
   SetSize(wxSize(370, h));
   SetMinSize(wxSize(370, h));
-  if (GetParent()) GetParent()->Layout();
 }
 
 void ObjectInspectorPanel::OnPaint(wxPaintEvent &) {
