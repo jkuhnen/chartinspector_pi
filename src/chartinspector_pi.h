@@ -13,6 +13,10 @@ class wxPanel;
 class wxStaticText;
 class wxTimer;
 
+namespace ci_ui {
+class ObjectInspectorPanel;
+}
+
 class ChartInspectorPi : public opencpn_plugin_118 {
 public:
   explicit ChartInspectorPi(void *ppimgr);
@@ -98,11 +102,17 @@ private:
   wxColour SignalColour(const wxString &value) const;
   wxString BuildLightSummary(const wxString &attributes) const;
 
-  // The compiled interaction layer keeps the proven implementation available
-  // under legacy names while replacing only the four UI entry points below.
-  // This avoids touching vector-query, hit-test and overlay behaviour.
+  // Legacy entry points compiled from the proven implementation. The modern
+  // translation unit replaces presentation only; vector-query and hit-test
+  // behaviour remains unchanged.
+  int GetPlugInVersionMinorLegacy();
   void SetColorSchemeLegacy(PI_ColorScheme cs);
   bool MouseEventHookLegacy(wxMouseEvent &event);
+  void UpdateHoverGeometryLegacy(bool force = false);
+  void UpdateHoverInfoPanelLegacy(
+      const wxString &feature, const wxString &objectName,
+      const wxString &attributes, int geometryType,
+      const wxString &associatedLightAttributes = wxEmptyString);
   void BuildInfoPanelLegacy(wxWindow *canvas);
   void ShowObjectPopupLegacy();
 
@@ -132,9 +142,10 @@ private:
   int m_hoverGeometryType = 0;  // 1 point, 2 line, 3 area
   wxString m_hoverFeature;
   bool m_hasHoverGeometry = false;
+  bool m_hoverScaleHidden = false;
 
-  // CHARTINSPECTOR_HOVER_INFO_V1
   wxFrame *m_hoverInfoWindow = nullptr;
+  ci_ui::ObjectInspectorPanel *m_hoverModernPanel = nullptr;
   wxStaticText *m_hoverInfoTitle = nullptr;
   wxStaticText *m_hoverInfoMeta = nullptr;
   wxPanel *m_hoverInfoDetails = nullptr;
