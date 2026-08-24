@@ -22,6 +22,21 @@
 #undef GetPlugInVersionMinor
 #undef DeInit
 
+namespace {
+
+wxString CI_CompactPropertyLabel(wxString label) {
+  if (label.StartsWith("Category of ")) return "Category";
+  if (label == "Light height") return "Height";
+  return label;
+}
+
+bool CI_IsLightHeroDuplicate(const wxString &label) {
+  return label == "Light characteristic" || label == "Period" ||
+         label == "Nominal range";
+}
+
+}  // namespace
+
 int ChartInspectorPi::GetPlugInVersionMinor() { return 4; }
 
 bool ChartInspectorPi::DeInit() {
@@ -57,7 +72,8 @@ void ChartInspectorPi::PresentModernInspector(
 
   const wxString catcamRaw = m_s57Catalog.RawAttributeValue(attributes, "CATCAM");
   long catcam = 0;
-  if (feature == "BOYCAR" && catcamRaw.ToLong(&catcam) && catcam >= 1 && catcam <= 4) {
+  if (feature == "BOYCAR" && CI_DecodeTrailingCode(catcamRaw, &catcam) &&
+      catcam >= 1 && catcam <= 4) {
     data.cardinalCategory = static_cast<int>(catcam);
     switch (catcam) {
       case 1: data.cardinalLabel = "North cardinal"; break;
@@ -65,10 +81,13 @@ void ChartInspectorPi::PresentModernInspector(
       case 3: data.cardinalLabel = "South cardinal"; break;
       case 4: data.cardinalLabel = "West cardinal"; break;
     }
+    data.title = data.cardinalLabel + " buoy";
     data.cardinalColours = CI_DecodeColours(
         m_s57Catalog.RawAttributeValue(attributes, "COLOUR"));
     data.cardinalColours.Replace(", ", " / ");
     data.cardinalColours.MakeLower();
+  } else if (feature == "BOYSPP") {
+    data.title = "Special purpose / general buoy";
   }
 
   const CI_NavigationInfo info = CI_BuildNavigationInfo(
@@ -83,8 +102,10 @@ void ChartInspectorPi::PresentModernInspector(
     } else {
       data.primaryLabel = info.primary.Left(colon);
       data.primaryValue = info.primary.Mid(colon + 1);
-      data.primaryLabel.Trim(true); data.primaryLabel.Trim(false);
-      data.primaryValue.Trim(true); data.primaryValue.Trim(false);
+      data.primaryLabel.Trim(true);
+      data.primaryLabel.Trim(false);
+      data.primaryValue.Trim(true);
+      data.primaryValue.Trim(false);
     }
   }
 
@@ -92,7 +113,8 @@ void ChartInspectorPi::PresentModernInspector(
   wxStringTokenizer lines(info.details, "\n", wxTOKEN_STRTOK);
   while (lines.HasMoreTokens()) {
     wxString line = lines.GetNextToken();
-    line.Trim(true); line.Trim(false);
+    line.Trim(true);
+    line.Trim(false);
     if (line.IsEmpty()) continue;
     const int colon = line.Find(':');
     if (colon == wxNOT_FOUND) continue;
@@ -100,18 +122,26 @@ void ChartInspectorPi::PresentModernInspector(
     ci_ui::InspectorProperty prop;
     prop.label = line.Left(colon);
     prop.value = line.Mid(colon + 1);
-    prop.label.Trim(true); prop.label.Trim(false);
-    prop.value.Trim(true); prop.value.Trim(false);
+    prop.label.Trim(true);
+    prop.label.Trim(false);
+    prop.value.Trim(true);
+    prop.value.Trim(false);
+
     if (prop.label == "Name") continue;
     if (data.cardinalCategory &&
-        (prop.label == "Category of cardinal" || prop.label == "Color"))
+        prop.label.Lower().StartsWith("category of cardinal"))
       continue;
+    if (data.cardinalCategory && prop.label == "Color") continue;
+    if (feature == "LIGHTS" && CI_IsLightHeroDuplicate(prop.label)) continue;
+
+    prop.label = CI_CompactPropertyLabel(prop.label);
 
     if (prop.label == "Color") {
       wxStringTokenizer colours(colourRaw, ",", wxTOKEN_STRTOK);
       while (colours.HasMoreTokens()) {
         wxString token = colours.GetNextToken();
-        token.Trim(true); token.Trim(false);
+        token.Trim(true);
+        token.Trim(false);
         if (!token.IsEmpty()) prop.colours.push_back(SignalColour(token));
       }
     }
@@ -122,19 +152,23 @@ void ChartInspectorPi::PresentModernInspector(
   if (feature == "LIGHTS") lightAttributes = attributes;
   if (!lightAttributes.IsEmpty()) {
     data.lightSummary = CI_LightSummary(m_s57Catalog, lightAttributes);
-    const wxString range = m_s57Catalog.RawAttributeValue(lightAttributes, "VALNMR");
+    const wxString range =
+        m_s57Catalog.RawAttributeValue(lightAttributes, "VALNMR");
     double nm = 0.0;
-    if (CI_ParseNumber(range, &nm)) data.lightRange = wxString::Format("%g NM", nm);
+    if (CI_ParseNumber(range, &nm))
+      data.lightRange = wxString::Format("%g NM", nm);
   }
 
   data.technical = "S-57 class: " + feature + "\nGeometry: " + data.geometry;
   if (m_showTechnicalData && !info.technical.IsEmpty()) {
-    wxString extra = info.technical;
-    wxStringTokenizer technicalLines(extra, "\n", wxTOKEN_STRTOK);
+    wxStringTokenizer technicalLines(info.technical, "\n", wxTOKEN_STRTOK);
     int skip = 2;
     while (technicalLines.HasMoreTokens()) {
       wxString t = technicalLines.GetNextToken();
-      if (skip > 0) { --skip; continue; }
+      if (skip > 0) {
+        --skip;
+        continue;
+      }
       if (!t.IsEmpty()) data.technical += "\n" + t;
     }
   }
@@ -218,7 +252,10 @@ void ChartInspectorPi::UpdateHoverGeometry(bool force) {
   HMODULE host = GetModuleHandleW(nullptr);
   auto queryFn = host ? reinterpret_cast<CI_QueryVectorV1>(
       GetProcAddress(host, "QueryVectorChartObjectsV1")) : nullptr;
-  if (!queryFn) { ClearHoverGeometry(); return; }
+  if (!queryFn) {
+    ClearHoverGeometry();
+    return;
+  }
 
   CI_VectorQueryV1 q{};
   q.struct_size = sizeof(q);
@@ -269,7 +306,8 @@ void ChartInspectorPi::UpdateHoverGeometry(bool force) {
         best = details;
         wxString lightAttributes;
         if (details.geometry == 1 &&
-            (details.feature.StartsWith("BOY") || details.feature.StartsWith("BCN"))) {
+            (details.feature.StartsWith("BOY") ||
+             details.feature.StartsWith("BCN"))) {
           CI_HoverCandidate light;
           light.cursorLat = details.points[0].lat;
           light.cursorLon = details.points[0].lon;
@@ -277,7 +315,8 @@ void ChartInspectorPi::UpdateHoverGeometry(bool force) {
           auto lq = q;
           lq.lat = light.cursorLat;
           lq.lon = light.cursorLon;
-          lq.search_radius_pixels = std::max(8.0, static_cast<double>(m_hitRadiusPixels));
+          lq.search_radius_pixels =
+              std::max(8.0, static_cast<double>(m_hitRadiusPixels));
           lq.flags &= ~CI_SKIP_ATTRIBUTES;
           lq.geometry_mask = 1u;
           lq.max_objects = 8;
@@ -285,7 +324,8 @@ void ChartInspectorPi::UpdateHoverGeometry(bool force) {
           queryFn(0, &lq, CI_CollectHover, &light);
           if (light.feature == "LIGHTS") lightAttributes = light.attributes;
         }
-        UpdateHoverInfoPanel(details.feature, details.objectName, details.attributes,
+        UpdateHoverInfoPanel(details.feature, details.objectName,
+                             details.attributes,
                              static_cast<int>(details.geometry), lightAttributes);
         m_hoverInfoKey = key;
       }
@@ -294,7 +334,10 @@ void ChartInspectorPi::UpdateHoverGeometry(bool force) {
 
   m_lastHoverQueryMs = now;
   m_lastHoverQueryPosition = m_mousePosition;
-  if (best.points.empty()) { ClearHoverGeometry(); return; }
+  if (best.points.empty()) {
+    ClearHoverGeometry();
+    return;
+  }
   m_hoverPoints.clear();
   m_hoverParts.clear();
   for (const auto &p : best.points) m_hoverPoints.push_back({p.lat, p.lon});
@@ -314,8 +357,10 @@ bool ChartInspectorPi::MouseEventHook(wxMouseEvent &event) {
   UpdateHoverGeometry(event.LeftDown());
   if (event.LeftDown()) UpdateHoverObject();
   if (event.LeftDown()) {
-    if (m_hasVectorObject) ShowObjectPopup();
-    else HideObjectPopup();
+    if (m_hasVectorObject)
+      ShowObjectPopup();
+    else
+      HideObjectPopup();
   }
   wxWindow *canvas = GetOCPNCanvasWindow();
   if (canvas) RequestRefresh(canvas);
