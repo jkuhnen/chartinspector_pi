@@ -19,11 +19,16 @@ jobs:
 
           path = Path('src/chartinspector_pi.cpp')
           s = path.read_text(encoding='utf-8')
-          s = s.replace('#include "ui/app_style.h"\n', '#include "ui/app_style.h"\n#include "ui/object_inspector_panel.h"\n', 1)
+          if '#include "ui/object_inspector_panel.h"' not in s:
+            s = s.replace('#include "ui/app_style.h"\n', '#include "ui/app_style.h"\n#include "ui/object_inspector_panel.h"\n', 1)
 
-          s = s.replace('void ChartInspectorPi::ApplyInfoTheme() {\n  if (!m_infoPanel) return;\n', '''void ChartInspectorPi::ApplyInfoTheme() {\n  if (!m_infoPanel) return;\n  if (auto *panel = dynamic_cast<ci_ui::ObjectInspectorPanel *>(m_infoPanel)) {\n    panel->SetScheme(m_colorScheme);\n    return;\n  }\n''', 1)
+          old = 'void ChartInspectorPi::ApplyInfoTheme() {\n  if (!m_infoPanel) return;\n'
+          if old in s:
+            s = s.replace(old, '''void ChartInspectorPi::ApplyInfoTheme() {\n  if (!m_infoPanel) return;\n  if (auto *panel = dynamic_cast<ci_ui::ObjectInspectorPanel *>(m_infoPanel)) {\n    panel->SetScheme(m_colorScheme);\n    return;\n  }\n''', 1)
 
-          s = s.replace('void ChartInspectorPi::BuildVisualSummary() {\n  if (!m_infoVisual) return;\n', '''void ChartInspectorPi::BuildVisualSummary() {\n  if (dynamic_cast<ci_ui::ObjectInspectorPanel *>(m_infoPanel)) return;\n  if (!m_infoVisual) return;\n''', 1)
+          old = 'void ChartInspectorPi::BuildVisualSummary() {\n  if (!m_infoVisual) return;\n'
+          if old in s:
+            s = s.replace(old, '''void ChartInspectorPi::BuildVisualSummary() {\n  if (dynamic_cast<ci_ui::ObjectInspectorPanel *>(m_infoPanel)) return;\n  if (!m_infoVisual) return;\n''', 1)
 
           build_panel = r'''void ChartInspectorPi::BuildInfoPanel(wxWindow *canvas) {
   if (m_infoPanel || !canvas) return;
@@ -125,14 +130,6 @@ jobs:
     double nm = 0.0;
     if (CI_ParseNumber(range, &nm))
       data.lightRange = wxString::Format("%g NM", nm);
-    const wxString lightColourRaw =
-        m_s57Catalog.RawAttributeValue(lightAttributes, "COLOUR");
-    wxStringTokenizer colours(lightColourRaw, ",", wxTOKEN_STRTOK);
-    while (colours.HasMoreTokens()) {
-      wxString token = colours.GetNextToken();
-      token.Trim(true); token.Trim(false);
-      if (!token.IsEmpty()) data.lightColours.push_back(SignalColour(token));
-    }
   }
 
   if (m_showTechnicalData) {
@@ -184,10 +181,10 @@ jobs:
       - name: Commit patch and remove helper
         shell: bash
         run: |
-          rm .github/workflows/_final_ui_polish.yml
+          rm -f .github/workflows/_final_ui_polish.yml .github/_final_ui_polish_trigger
           git config user.name "openai-assistant"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/chartinspector_pi.cpp demo/maritimeui_pi/src/maritimeui_pi.cpp demo/maritimeui_pi/CMakeLists.txt .github/workflows/_final_ui_polish.yml
+          git add -A
           git diff --cached --check
           git commit -m "Polish maritime UI and integrate real Chart Inspector data"
           git push origin HEAD:ui/chartinspector-final-polish
