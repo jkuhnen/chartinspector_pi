@@ -67,14 +67,8 @@ private:
                                int attributesSize, int *primitiveType,
                                double *markerLat, double *markerLon);
 
-  struct HoverPosition {
-    double lat = 0.0;
-    double lon = 0.0;
-  };
-  struct HoverPart {
-    unsigned int firstPoint = 0;
-    unsigned int pointCount = 0;
-  };
+  struct HoverPosition { double lat = 0.0; double lon = 0.0; };
+  struct HoverPart { unsigned int firstPoint = 0; unsigned int pointCount = 0; };
 
   void BuildToolbarBitmaps();
   void UpdateToolbarVisual();
@@ -99,12 +93,16 @@ private:
   void StopLightPreview();
   void ShowObjectPopup();
   void HideObjectPopup();
+  void PresentModernInspector(ci_ui::ObjectInspectorPanel *panel,
+                              const wxString &feature,
+                              const wxString &objectName,
+                              const wxString &attributes,
+                              int geometryType,
+                              const wxString &associatedLightAttributes,
+                              bool scaleHidden);
   wxColour SignalColour(const wxString &value) const;
   wxString BuildLightSummary(const wxString &attributes) const;
 
-  // Legacy entry points compiled from the proven implementation. The modern
-  // translation unit replaces presentation only; vector-query and hit-test
-  // behaviour remains unchanged.
   int GetPlugInVersionMinorLegacy();
   void SetColorSchemeLegacy(PI_ColorScheme cs);
   bool MouseEventHookLegacy(wxMouseEvent &event);
@@ -133,13 +131,13 @@ private:
   wxString m_associatedLightAttributes;
   double m_lastObjectLat = 0.0;
   double m_lastObjectLon = 0.0;
-  int m_lastPrimitiveType = 1;  // 1 point, 2 line, 3 area
+  int m_lastPrimitiveType = 1;
   bool m_hasVectorObject = false;
   bool m_hasAssociatedLight = false;
 
   std::vector<HoverPosition> m_hoverPoints;
   std::vector<HoverPart> m_hoverParts;
-  int m_hoverGeometryType = 0;  // 1 point, 2 line, 3 area
+  int m_hoverGeometryType = 0;
   wxString m_hoverFeature;
   bool m_hasHoverGeometry = false;
   bool m_hoverScaleHidden = false;
@@ -186,4 +184,4 @@ private:
   HitTestV3Fn m_hitTestV4 = nullptr;
 };
 
-#endif  // CHARTINSPECTOR_PI_H
+#endif
