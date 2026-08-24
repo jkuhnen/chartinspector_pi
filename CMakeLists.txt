@@ -21,6 +21,8 @@ add_library(chartinspector_pi SHARED
     src/ui/app_style.h
     src/ui/rounded_panel.cpp
     src/ui/rounded_panel.h
+    src/ui/object_inspector_panel.cpp
+    src/ui/object_inspector_panel.h
 )
 
 target_include_directories(chartinspector_pi PRIVATE
