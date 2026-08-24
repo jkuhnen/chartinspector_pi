@@ -63,10 +63,11 @@ private:
     dc.DrawLine(18, y, GetClientSize().GetWidth() - 18, y);
   }
 
-  void DrawStatusDot(wxDC &dc, int x, int y, const wxColour &colour) {
+  void DrawStatusDot(wxDC &dc, int x, int y, const wxColour &colour,
+                     int radius = 4) {
     dc.SetPen(*wxTRANSPARENT_PEN);
     dc.SetBrush(wxBrush(colour));
-    dc.DrawCircle(wxPoint(x, y), 4);
+    dc.DrawCircle(wxPoint(x, y), radius);
   }
 
   void DrawChevron(wxDC &dc, int x, int y, bool expanded) {
@@ -80,6 +81,23 @@ private:
     }
   }
 
+  void DrawCardinalTopmark(wxDC &dc, int x, int y, int category) {
+    dc.SetPen(wxPen(m_palette.textPrimary, 2));
+    dc.SetBrush(*wxTRANSPARENT_BRUSH);
+    auto up = [&](int yy) {
+      dc.DrawLine(x - 8, yy + 10, x, yy);
+      dc.DrawLine(x, yy, x + 8, yy + 10);
+    };
+    auto down = [&](int yy) {
+      dc.DrawLine(x - 8, yy, x, yy + 10);
+      dc.DrawLine(x, yy + 10, x + 8, yy);
+    };
+    if (category == 1) { up(y); up(y + 7); }
+    else if (category == 2) { up(y); down(y + 8); }
+    else if (category == 3) { down(y); down(y + 7); }
+    else if (category == 4) { down(y); up(y + 8); }
+  }
+
   void OnPaint(wxPaintEvent &) {
     wxAutoBufferedPaintDC dc(this);
     dc.SetBackground(wxBrush(m_palette.windowBackground));
@@ -90,8 +108,8 @@ private:
     const wxFont tiny = MakeFont(base, -1, wxFONTWEIGHT_NORMAL);
     const wxFont label = MakeFont(base, 0, wxFONTWEIGHT_NORMAL);
     const wxFont value = MakeFont(base, 1, wxFONTWEIGHT_BOLD);
-    const wxFont title = MakeFont(base, 4, wxFONTWEIGHT_BOLD);
-    const wxFont hero = MakeFont(base, 7, wxFONTWEIGHT_BOLD);
+    const wxFont title = MakeFont(base, 3, wxFONTWEIGHT_BOLD);
+    const wxFont hero = MakeFont(base, 6, wxFONTWEIGHT_BOLD);
 
     dc.SetPen(wxPen(m_palette.panelBorder, 1));
     dc.SetBrush(*wxTRANSPARENT_BRUSH);
@@ -100,7 +118,7 @@ private:
     dc.SetPen(*wxTRANSPARENT_PEN);
     dc.SetBrush(wxBrush(m_palette.panelBackground));
     dc.DrawRectangle(1, 1, size.GetWidth() - 2, 35);
-    DrawText(dc, "OBJECT INSPECTOR", 14, 10, tiny, m_palette.textSecondary);
+    DrawText(dc, "Object inspector", 14, 10, tiny, m_palette.textSecondary);
 
     m_closeRect = wxRect(size.GetWidth() - 36, 1, 35, 35);
     if (m_closeHover) {
@@ -112,48 +130,44 @@ private:
     dc.DrawLine(size.GetWidth() - 14, 12, size.GetWidth() - 24, 22);
 
     int y = 52;
-    DrawText(dc, "NORTH CARDINAL BUOY", 18, y, title, m_palette.textPrimary);
+    DrawText(dc, "North cardinal buoy", 18, y, title, m_palette.textPrimary);
     y += 30;
     DrawText(dc, "Middelgrund N", 18, y, value, m_palette.textPrimary);
     y += 25;
-    DrawText(dc, "BOYCAR  ·  POINT", 18, y, tiny, m_palette.textSecondary);
+    DrawText(dc, "BOYCAR | POINT", 18, y, tiny, m_palette.textSecondary);
 
-    y += 34;
+    y += 32;
     DrawRule(dc, y);
     y += 18;
 
-    DrawText(dc, "NORTH CARDINAL", 48, y, value, m_palette.textPrimary);
-    dc.SetPen(wxPen(m_palette.textPrimary, 2));
-    dc.SetBrush(*wxTRANSPARENT_BRUSH);
-    dc.DrawLine(24, y + 17, 32, y + 5);
-    dc.DrawLine(32, y + 5, 40, y + 17);
-    dc.DrawLine(24, y + 23, 32, y + 11);
-    dc.DrawLine(32, y + 11, 40, y + 23);
+    DrawCardinalTopmark(dc, 32, y + 2, 1);
+    DrawText(dc, "North cardinal", 50, y, value, m_palette.textPrimary);
     y += 27;
-    DrawText(dc, "black / yellow", 48, y, label, m_palette.textSecondary);
+    DrawText(dc, "black / yellow", 50, y, label, m_palette.textSecondary);
     y += 31;
+
     DrawText(dc, "Q W 1s", 18, y, hero, m_palette.textPrimary);
     DrawText(dc, "5 NM", 238, y + 4, value, m_palette.textPrimary);
     y += 40;
-    DrawText(dc, "LIGHT CHARACTER", 18, y, tiny, m_palette.textSecondary);
-    DrawText(dc, "NOMINAL RANGE", 238, y, tiny, m_palette.textSecondary);
+    DrawText(dc, "Light characteristic", 18, y, tiny, m_palette.textSecondary);
+    DrawText(dc, "Nominal range", 238, y, tiny, m_palette.textSecondary);
 
-    y += 29;
+    y += 28;
     DrawRule(dc, y);
     y += 18;
 
-    DrawText(dc, "CHART SOURCE", 18, y, tiny, m_palette.textSecondary);
-    DrawText(dc, "DK ENC · current", 150, y - 1, label, m_palette.textPrimary);
+    DrawText(dc, "Chart source", 18, y, tiny, m_palette.textSecondary);
+    DrawText(dc, "DK ENC | current", 150, y - 1, label, m_palette.textPrimary);
     y += 30;
 
-    DrawStatusDot(dc, 22, y + 7, m_palette.warning);
-    DrawText(dc, "SCALE", 36, y, tiny, m_palette.textSecondary);
+    DrawStatusDot(dc, 22, y + 7, m_palette.accent, 3);
+    DrawText(dc, "Scale", 36, y, tiny, m_palette.textSecondary);
     DrawText(dc, "Not shown at current scale", 150, y - 1, label,
-             m_palette.warning);
+             m_palette.textSecondary);
     y += 30;
 
     DrawStatusDot(dc, 22, y + 7, m_palette.alarm);
-    DrawText(dc, "POSITION", 36, y, tiny, m_palette.textSecondary);
+    DrawText(dc, "Position", 36, y, tiny, m_palette.textSecondary);
     DrawText(dc, "Invalid sample data", 150, y - 1, value, m_palette.alarm);
 
     y += 34;
@@ -166,7 +180,7 @@ private:
       dc.SetBrush(wxBrush(m_palette.panelBackground));
       dc.DrawRectangle(m_technicalRect);
     }
-    DrawText(dc, "SOURCE / TECHNICAL", 18, y + 13, tiny,
+    DrawText(dc, "Source / technical", 18, y + 13, tiny,
              m_palette.textSecondary);
     DrawChevron(dc, size.GetWidth() - 24, y + 21, m_technicalExpanded);
     y += 47;
@@ -174,16 +188,16 @@ private:
     if (m_technicalExpanded) {
       DrawText(dc, "Cell", 18, y, tiny, m_palette.textSecondary);
       DrawText(dc, "DK4KATGN", 150, y - 1, label, m_palette.textPrimary);
-      y += 24;
+      y += 22;
       DrawText(dc, "Edition / update", 18, y, tiny, m_palette.textSecondary);
       DrawText(dc, "7A / 12", 150, y - 1, label, m_palette.textPrimary);
-      y += 24;
+      y += 22;
       DrawText(dc, "SORDAT", 18, y, tiny, m_palette.textSecondary);
       DrawText(dc, "20260415", 150, y - 1, label, m_palette.textPrimary);
-      y += 24;
+      y += 22;
       DrawText(dc, "SCAMIN", 18, y, tiny, m_palette.textSecondary);
       DrawText(dc, "45000", 150, y - 1, label, m_palette.textPrimary);
-      y += 24;
+      y += 22;
       DrawText(dc, "S-57 class", 18, y, tiny, m_palette.textSecondary);
       DrawText(dc, "BOYCAR", 150, y - 1, label, m_palette.textPrimary);
     }
@@ -197,7 +211,7 @@ private:
     }
     if (m_technicalRect.Contains(p)) {
       m_technicalExpanded = !m_technicalExpanded;
-      SetClientSize(wxSize(370, m_technicalExpanded ? 585 : 465));
+      SetClientSize(wxSize(370, m_technicalExpanded ? 575 : 465));
       Refresh(false);
       return;
     }
@@ -283,7 +297,7 @@ bool MaritimeUiPi::DeInit() {
 int MaritimeUiPi::GetAPIVersionMajor() { return 1; }
 int MaritimeUiPi::GetAPIVersionMinor() { return 18; }
 int MaritimeUiPi::GetPlugInVersionMajor() { return 0; }
-int MaritimeUiPi::GetPlugInVersionMinor() { return 2; }
+int MaritimeUiPi::GetPlugInVersionMinor() { return 3; }
 int MaritimeUiPi::GetToolbarToolCount() { return 1; }
 
 wxBitmap *MaritimeUiPi::GetPlugInBitmap() { return &m_pluginBitmap; }
@@ -292,7 +306,7 @@ wxString MaritimeUiPi::GetShortDescription() {
   return "Navigation-oriented maritime HMI design demonstrator.";
 }
 wxString MaritimeUiPi::GetLongDescription() {
-  return "V2.1 demonstrator for a compact custom-drawn maritime interaction "
+  return "V3 demonstrator for a compact custom-drawn maritime interaction "
          "layer following OpenCPN DAY, DUSK and NIGHT colour schemes.";
 }
 
