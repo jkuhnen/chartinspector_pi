@@ -318,10 +318,11 @@ wxString ChartInspectorPi::GetLongDescription() {
 }
 
 void ChartInspectorPi::BuildToolbarBitmaps() {
-  auto build = [](const wxColour &colour, bool active) {
+  const ci_ui::AppPalette palette = ci_ui::AppStyle::PaletteFor(m_colorScheme);
+  auto build = [&](const wxColour &colour, bool active) {
     wxBitmap bitmap(24, 24);
     wxMemoryDC dc(bitmap);
-    dc.SetBackground(wxBrush(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW)));
+    dc.SetBackground(wxBrush(palette.windowBackground));
     dc.Clear();
     dc.SetPen(wxPen(colour, active ? 3 : 2));
     dc.SetBrush(active ? wxBrush(colour) : *wxTRANSPARENT_BRUSH);
@@ -331,8 +332,8 @@ void ChartInspectorPi::BuildToolbarBitmaps() {
     dc.SelectObject(wxNullBitmap);
     return bitmap;
   };
-  m_toolbarEnabledBitmap = build(wxColour(0, 210, 235), true);
-  m_toolbarDisabledBitmap = build(wxColour(115, 115, 115), false);
+  m_toolbarEnabledBitmap = build(palette.focus, true);
+  m_toolbarDisabledBitmap = build(palette.textSecondary, false);
 }
 
 void ChartInspectorPi::UpdateToolbarVisual() {
@@ -344,37 +345,60 @@ void ChartInspectorPi::UpdateToolbarVisual() {
 
 void ChartInspectorPi::ApplyInfoTheme() {
   if (!m_infoPanel) return;
-  wxColour background = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
-  wxColour foreground = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
-  wxColour secondary = wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT);
-  GetGlobalColor("DILG0", &background);
-  GetGlobalColor("DILG4", &foreground);
-  GetGlobalColor("DILG3", &secondary);
-  m_infoPanel->SetBackgroundColour(background);
-  m_infoPanel->SetForegroundColour(foreground);
+  const ci_ui::AppPalette palette = ci_ui::AppStyle::PaletteFor(m_colorScheme);
+  m_infoPanel->SetBackgroundColour(palette.cardBackground);
+  m_infoPanel->SetForegroundColour(palette.textPrimary);
+  if (auto *card = dynamic_cast<ci_ui::RoundedPanel *>(m_infoPanel))
+    card->SetCardColours(palette.cardBackground, palette.cardBorder);
+
   if (m_infoVisual) {
-    m_infoVisual->SetBackgroundColour(background);
-    m_infoVisual->SetForegroundColour(foreground);
+    m_infoVisual->SetBackgroundColour(palette.cardBackground);
+    m_infoVisual->SetForegroundColour(palette.textPrimary);
   }
-  if (m_infoTitle) m_infoTitle->SetForegroundColour(foreground);
-  if (m_infoSubtitle) m_infoSubtitle->SetForegroundColour(foreground);
-  if (m_infoAcronym) m_infoAcronym->SetForegroundColour(secondary);
-  if (m_infoBody) m_infoBody->SetForegroundColour(foreground);
-  if (m_infoTechnical) m_infoTechnical->SetForegroundColour(secondary);
+  if (m_infoTitle) {
+    m_infoTitle->SetBackgroundColour(palette.cardBackground);
+    m_infoTitle->SetForegroundColour(palette.textPrimary);
+  }
+  if (m_infoSubtitle) {
+    m_infoSubtitle->SetBackgroundColour(palette.cardBackground);
+    m_infoSubtitle->SetForegroundColour(palette.textPrimary);
+  }
+  if (m_infoAcronym) {
+    m_infoAcronym->SetBackgroundColour(palette.cardBackground);
+    m_infoAcronym->SetForegroundColour(palette.textSecondary);
+  }
+  if (m_infoBody) {
+    m_infoBody->SetBackgroundColour(palette.cardBackground);
+    m_infoBody->SetForegroundColour(palette.textPrimary);
+  }
+  if (m_infoTechnical) {
+    m_infoTechnical->SetBackgroundColour(palette.cardBackground);
+    m_infoTechnical->SetForegroundColour(palette.textSecondary);
+  }
+
+  const wxWindowList &children = m_infoPanel->GetChildren();
+  for (wxWindowList::const_iterator it = children.begin(); it != children.end(); ++it) {
+    wxWindow *child = *it;
+    if (!child || child == m_lightIndicator || child == m_infoVisual) continue;
+    if (auto *button = dynamic_cast<wxButton *>(child)) {
+      button->SetBackgroundColour(palette.cardBackground);
+      button->SetForegroundColour(palette.textPrimary);
+    }
+  }
   if (m_infoVisual) {
     const wxWindowList &children = m_infoVisual->GetChildren();
-    for (wxWindowList::const_iterator it = children.begin(); it != children.end();
-         ++it) {
+    for (wxWindowList::const_iterator it = children.begin(); it != children.end(); ++it) {
       wxWindow *child = *it;
       if (!child || child == m_lightIndicator) continue;
       if (dynamic_cast<wxStaticText *>(child)) {
-        child->SetBackgroundColour(background);
-        child->SetForegroundColour(foreground);
+        child->SetBackgroundColour(palette.cardBackground);
+        child->SetForegroundColour(palette.textPrimary);
       }
     }
   }
-  if (m_lightIndicator) m_lightIndicator->SetBackgroundColour(background);
-  m_infoPanel->Refresh();
+  if (m_lightIndicator)
+    m_lightIndicator->SetBackgroundColour(palette.cardBackground);
+  m_infoPanel->Refresh(false);
 }
 
 void ChartInspectorPi::LoadConfig() {
@@ -415,6 +439,8 @@ void ChartInspectorPi::SetCursorLatLon(double lat, double lon) {
 
 void ChartInspectorPi::SetColorScheme(PI_ColorScheme cs) {
   m_colorScheme = cs;
+  BuildToolbarBitmaps();
+  UpdateToolbarVisual();
   ApplyInfoTheme();
   ApplyHoverWindowTheme();
   if (m_infoPanel && m_infoPanel->IsShown()) {
@@ -1338,14 +1364,10 @@ void ChartInspectorPi::BuildVisualSummary() {
     m_lightIndicator->Bind(wxEVT_PAINT, [this](wxPaintEvent &) {
       if (!m_lightIndicator) return;
       wxAutoBufferedPaintDC dc(m_lightIndicator);
-      wxColour background = m_infoVisual->GetBackgroundColour();
-      wxColour border = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
-      GetGlobalColor("DILG4", &border);
-      wxColour offColour(68, 68, 68);
-      if (m_colorScheme == PI_GLOBAL_COLOR_SCHEME_DUSK)
-        offColour = wxColour(58, 58, 58);
-      else if (m_colorScheme == PI_GLOBAL_COLOR_SCHEME_NIGHT)
-        offColour = wxColour(44, 44, 44);
+      const ci_ui::AppPalette palette = ci_ui::AppStyle::PaletteFor(m_colorScheme);
+      const wxColour background = palette.cardBackground;
+      const wxColour border = palette.textSecondary;
+      const wxColour offColour = palette.cardBorder;
       dc.SetBackground(wxBrush(background));
       dc.Clear();
       dc.SetPen(wxPen(border, 2));
@@ -1464,37 +1486,52 @@ void ChartInspectorPi::BuildVisualSummary() {
 
 void ChartInspectorPi::BuildInfoPanel(wxWindow *canvas) {
   if (m_infoPanel || !canvas) return;
-  m_infoPanel = new wxPanel(canvas, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-                            wxBORDER_SIMPLE);
+  m_infoPanel = new ci_ui::RoundedPanel(canvas, ci_ui::AppStyle::kCardRadius);
   wxBoxSizer *root = new wxBoxSizer(wxVERTICAL);
   wxBoxSizer *header = new wxBoxSizer(wxHORIZONTAL);
+
   m_infoTitle = new wxStaticText(m_infoPanel, wxID_ANY, wxEmptyString);
-  wxFont titleFont = m_infoTitle->GetFont();
-  titleFont.SetWeight(wxFONTWEIGHT_BOLD);
-  titleFont.SetPointSize(titleFont.GetPointSize() + 2);
-  m_infoTitle->SetFont(titleFont);
+  m_infoTitle->SetFont(ci_ui::AppStyle::TitleFont(m_infoTitle->GetFont()));
   header->Add(m_infoTitle, 1, wxALIGN_CENTER_VERTICAL);
+
   wxButton *close = new wxButton(m_infoPanel, wxID_ANY, "x", wxDefaultPosition,
-                                 wxSize(28, 26), wxBU_EXACTFIT);
+                                 wxSize(30, 28), wxBU_EXACTFIT);
+  close->SetToolTip("Close Chart Inspector");
   close->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) { HideObjectPopup(); });
-  header->Add(close, 0, wxLEFT, 8);
-  root->Add(header, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 12);
+  header->Add(close, 0, wxLEFT, ci_ui::AppStyle::kSpaceSm);
+  root->Add(header, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP,
+            ci_ui::AppStyle::kSpaceMd);
+
   m_infoSubtitle = new wxStaticText(m_infoPanel, wxID_ANY, wxEmptyString);
-  root->Add(m_infoSubtitle, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+  m_infoSubtitle->SetFont(ci_ui::AppStyle::PrimaryFont(m_infoSubtitle->GetFont()));
+  root->Add(m_infoSubtitle, 0, wxLEFT | wxRIGHT | wxTOP,
+            ci_ui::AppStyle::kSpaceSm);
+
   m_infoAcronym = new wxStaticText(m_infoPanel, wxID_ANY, wxEmptyString);
-  root->Add(m_infoAcronym, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+  m_infoAcronym->SetFont(ci_ui::AppStyle::TechnicalFont(m_infoAcronym->GetFont()));
+  root->Add(m_infoAcronym, 0, wxLEFT | wxRIGHT | wxTOP,
+            ci_ui::AppStyle::kSpaceXs);
+
   root->Add(new wxStaticLine(m_infoPanel), 0,
-            wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 12);
-  m_infoVisual = new wxPanel(m_infoPanel, wxID_ANY);
+            wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM,
+            ci_ui::AppStyle::kSpaceMd);
+
+  m_infoVisual = new wxPanel(m_infoPanel, wxID_ANY, wxDefaultPosition,
+                             wxDefaultSize, wxBORDER_NONE);
   m_infoVisual->SetSizer(new wxBoxSizer(wxVERTICAL));
-  root->Add(m_infoVisual, 0, wxEXPAND | wxLEFT | wxRIGHT, 12);
+  root->Add(m_infoVisual, 0, wxEXPAND | wxLEFT | wxRIGHT,
+            ci_ui::AppStyle::kSpaceMd);
+
   m_infoBody = new wxStaticText(m_infoPanel, wxID_ANY, wxEmptyString);
-  root->Add(m_infoBody, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 12);
+  m_infoBody->SetFont(ci_ui::AppStyle::LabelFont(m_infoBody->GetFont()));
+  root->Add(m_infoBody, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP,
+            ci_ui::AppStyle::kSpaceMd);
+
   m_infoTechnical = new wxStaticText(m_infoPanel, wxID_ANY, wxEmptyString);
-  wxFont techFont = m_infoTechnical->GetFont();
-  techFont.SetPointSize(std::max(7, techFont.GetPointSize() - 1));
-  m_infoTechnical->SetFont(techFont);
-  root->Add(m_infoTechnical, 0, wxEXPAND | wxALL, 12);
+  m_infoTechnical->SetFont(
+      ci_ui::AppStyle::TechnicalFont(m_infoTechnical->GetFont()));
+  root->Add(m_infoTechnical, 0, wxEXPAND | wxALL,
+            ci_ui::AppStyle::kSpaceMd);
   m_infoPanel->SetSizer(root);
   ApplyInfoTheme();
   m_infoPanel->Hide();
@@ -1868,32 +1905,49 @@ void ChartInspectorPi::SendVectorChartObjectInfo(
 
 bool ChartInspectorPi::RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp) {
   if (!vp || !m_enabled) return false;
+  const ci_ui::AppPalette palette = ci_ui::AppStyle::PaletteFor(m_colorScheme);
+  bool rendered = false;
+  dc.SetBrush(*wxTRANSPARENT_BRUSH);
+
+  // Selection is persistent and deliberately quieter than hover.
+  // It remains visible while the operator inspects a different object.
+  if (m_hasVectorObject) {
+    wxPoint p;
+    GetCanvasPixLL(vp, &p, m_lastObjectLat, m_lastObjectLon);
+    dc.SetPen(wxPen(palette.accent, 2));
+    dc.DrawCircle(p, 9);
+    rendered = true;
+  }
+
   if (m_hasHoverGeometry) {
-    dc.SetBrush(*wxTRANSPARENT_BRUSH);
     auto draw = [&](int width, const wxColour &colour) {
       dc.SetPen(wxPen(colour, width));
       if (m_hoverGeometryType == 1 && !m_hoverPoints.empty()) {
-        wxPoint p; GetCanvasPixLL(vp, &p, m_hoverPoints[0].lat, m_hoverPoints[0].lon);
-        dc.DrawCircle(p, width > 5 ? 15 : 12);
+        wxPoint p;
+        GetCanvasPixLL(vp, &p, m_hoverPoints[0].lat, m_hoverPoints[0].lon);
+        dc.DrawCircle(p, width > 4 ? 14 : 12);
       } else {
         for (const auto &part : m_hoverParts) {
           if (part.pointCount < 2 || part.firstPoint >= m_hoverPoints.size()) continue;
           std::vector<wxPoint> pix;
-          const unsigned int end = std::min<unsigned int>(part.firstPoint + part.pointCount, static_cast<unsigned int>(m_hoverPoints.size()));
+          const unsigned int end = std::min<unsigned int>(
+              part.firstPoint + part.pointCount,
+              static_cast<unsigned int>(m_hoverPoints.size()));
           for (unsigned int i = part.firstPoint; i < end; ++i) {
-            wxPoint p; GetCanvasPixLL(vp, &p, m_hoverPoints[i].lat, m_hoverPoints[i].lon); pix.push_back(p);
+            wxPoint p;
+            GetCanvasPixLL(vp, &p, m_hoverPoints[i].lat, m_hoverPoints[i].lon);
+            pix.push_back(p);
           }
-          if (pix.size() >= 2) dc.DrawLines(static_cast<int>(pix.size()), pix.data());
+          if (pix.size() >= 2)
+            dc.DrawLines(static_cast<int>(pix.size()), pix.data());
         }
       }
     };
-    draw(9, wxColour(0, 120, 160)); draw(3, wxColour(0, 255, 255));
-    return true;
+    draw(7, palette.focusHalo);
+    draw(2, palette.focus);
+    rendered = true;
   }
-  if (!m_hasVectorObject) return false;
-  wxPoint p; GetCanvasPixLL(vp, &p, m_lastObjectLat, m_lastObjectLon);
-  dc.SetBrush(*wxTRANSPARENT_BRUSH); dc.SetPen(wxPen(wxColour(0, 255, 255), 3)); dc.DrawCircle(p, 12);
-  return true;
+  return rendered;
 }
 
 bool ChartInspectorPi::RenderGLOverlayMultiCanvas(wxGLContext *pcontext,
@@ -1905,6 +1959,14 @@ bool ChartInspectorPi::RenderGLOverlayMultiCanvas(wxGLContext *pcontext,
   if (!vp) return false;
   if (priority != -1 && priority != OVERLAY_LEGACY) return false;
   if (!m_enabled || (!m_hasVectorObject && !m_hasHoverGeometry)) return true;
+
+  const ci_ui::AppPalette palette = ci_ui::AppStyle::PaletteFor(m_colorScheme);
+  auto setColour = [](const wxColour &colour, float alpha) {
+    glColor4f(static_cast<float>(colour.Red()) / 255.0f,
+              static_cast<float>(colour.Green()) / 255.0f,
+              static_cast<float>(colour.Blue()) / 255.0f, alpha);
+  };
+
   glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_LINE_BIT |
                GL_TRANSFORM_BIT | GL_VIEWPORT_BIT | GL_CURRENT_BIT);
   glDisable(GL_TEXTURE_2D);
@@ -1919,30 +1981,57 @@ bool ChartInspectorPi::RenderGLOverlayMultiCanvas(wxGLContext *pcontext,
   glMatrixMode(GL_MODELVIEW);
   glPushMatrix();
   glLoadIdentity();
-  auto drawHoverGL = [&](float width, float alpha) {
-    glLineWidth(width); glColor4f(0.0f, 1.0f, 1.0f, alpha);
-    if (m_hasHoverGeometry && m_hoverGeometryType == 1 && !m_hoverPoints.empty()) {
-      wxPoint p; GetCanvasPixLL(vp, &p, m_hoverPoints[0].lat, m_hoverPoints[0].lon);
-      const float r = width > 5.0f ? 15.0f : 12.0f; glBegin(GL_LINE_LOOP);
-      for (int i = 0; i < 32; ++i) { const float a = i * 6.28318530718f / 32.0f; glVertex2f(p.x + r*cosf(a), p.y + r*sinf(a)); }
+
+  if (m_hasVectorObject) {
+    wxPoint p;
+    GetCanvasPixLL(vp, &p, m_lastObjectLat, m_lastObjectLon);
+    setColour(palette.accent, 0.90f);
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    for (int i = 0; i < 32; ++i) {
+      const float a = i * 6.28318530718f / 32.0f;
+      glVertex2f(p.x + 9.0f * cosf(a), p.y + 9.0f * sinf(a));
+    }
+    glEnd();
+  }
+
+  auto drawHoverGL = [&](float width, const wxColour &colour,
+                         float alpha) {
+    glLineWidth(width);
+    setColour(colour, alpha);
+    if (m_hoverGeometryType == 1 && !m_hoverPoints.empty()) {
+      wxPoint p;
+      GetCanvasPixLL(vp, &p, m_hoverPoints[0].lat, m_hoverPoints[0].lon);
+      const float r = width > 4.0f ? 14.0f : 12.0f;
+      glBegin(GL_LINE_LOOP);
+      for (int i = 0; i < 32; ++i) {
+        const float a = i * 6.28318530718f / 32.0f;
+        glVertex2f(p.x + r * cosf(a), p.y + r * sinf(a));
+      }
       glEnd();
-    } else if (m_hasHoverGeometry) {
+    } else {
       for (const auto &part : m_hoverParts) {
-        if (part.pointCount < 2 || part.firstPoint >= m_hoverPoints.size()) continue;
-        const unsigned int end = std::min<unsigned int>(part.firstPoint + part.pointCount, static_cast<unsigned int>(m_hoverPoints.size()));
+        if (part.pointCount < 2 || part.firstPoint >= m_hoverPoints.size())
+          continue;
+        const unsigned int end = std::min<unsigned int>(
+            part.firstPoint + part.pointCount,
+            static_cast<unsigned int>(m_hoverPoints.size()));
         glBegin(GL_LINE_STRIP);
-        for (unsigned int i = part.firstPoint; i < end; ++i) { wxPoint p; GetCanvasPixLL(vp, &p, m_hoverPoints[i].lat, m_hoverPoints[i].lon); glVertex2f((float)p.x, (float)p.y); }
+        for (unsigned int i = part.firstPoint; i < end; ++i) {
+          wxPoint p;
+          GetCanvasPixLL(vp, &p, m_hoverPoints[i].lat, m_hoverPoints[i].lon);
+          glVertex2f(static_cast<float>(p.x), static_cast<float>(p.y));
+        }
         glEnd();
       }
     }
   };
-  if (m_hasHoverGeometry) { drawHoverGL(9.0f, 0.32f); drawHoverGL(3.0f, 0.95f); }
-  else {
-    wxPoint p; GetCanvasPixLL(vp, &p, m_lastObjectLat, m_lastObjectLon);
-    glColor4f(0.0f, 1.0f, 1.0f, 0.9f); glLineWidth(3.0f); glBegin(GL_LINE_LOOP);
-    for (int i = 0; i < 32; ++i) { const float a = i * 6.28318530718f / 32.0f; glVertex2f(p.x + 12.0f*cosf(a), p.y + 12.0f*sinf(a)); }
-    glEnd();
+
+  if (m_hasHoverGeometry) {
+    drawHoverGL(7.0f, palette.focusHalo, 0.45f);
+    drawHoverGL(2.0f, palette.focus, 0.95f);
   }
+
   glPopMatrix();
   glMatrixMode(GL_PROJECTION);
   glPopMatrix();
