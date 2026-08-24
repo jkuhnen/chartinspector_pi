@@ -36,7 +36,6 @@ private:
   wxBitmap m_pluginBitmap;
   wxBitmap m_toolbarBitmap;
   wxFrame *m_window = nullptr;
-  wxPanel *m_canvas = nullptr;
   PI_ColorScheme m_colorScheme = PI_GLOBAL_COLOR_SCHEME_DAY;
 };
 
