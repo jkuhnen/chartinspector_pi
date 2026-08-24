@@ -14,16 +14,24 @@ extern "C" DECL_EXP void destroy_pi(opencpn_plugin *plugin) {
 
 namespace {
 
-class DemoCanvas : public wxPanel {
+class DemoFrame : public wxFrame {
 public:
-  DemoCanvas(wxFrame *frame, PI_ColorScheme scheme)
-      : wxPanel(frame, wxID_ANY), m_frame(frame), m_scheme(scheme) {
+  DemoFrame(wxWindow *parent, PI_ColorScheme scheme)
+      : wxFrame(parent, wxID_ANY, wxEmptyString, wxDefaultPosition,
+                wxSize(370, 465),
+                wxFRAME_TOOL_WINDOW | wxSTAY_ON_TOP | wxBORDER_NONE),
+        m_scheme(scheme) {
     SetBackgroundStyle(wxBG_STYLE_PAINT);
-    Bind(wxEVT_PAINT, &DemoCanvas::OnPaint, this);
-    Bind(wxEVT_LEFT_DOWN, &DemoCanvas::OnLeftDown, this);
-    Bind(wxEVT_LEFT_UP, &DemoCanvas::OnLeftUp, this);
-    Bind(wxEVT_MOTION, &DemoCanvas::OnMotion, this);
-    Bind(wxEVT_LEAVE_WINDOW, &DemoCanvas::OnLeave, this);
+    SetClientSize(wxSize(370, 465));
+    SetMinClientSize(wxSize(370, 465));
+
+    Bind(wxEVT_PAINT, &DemoFrame::OnPaint, this);
+    Bind(wxEVT_LEFT_DOWN, &DemoFrame::OnLeftDown, this);
+    Bind(wxEVT_LEFT_UP, &DemoFrame::OnLeftUp, this);
+    Bind(wxEVT_MOTION, &DemoFrame::OnMotion, this);
+    Bind(wxEVT_LEAVE_WINDOW, &DemoFrame::OnLeave, this);
+    Bind(wxEVT_CLOSE_WINDOW, &DemoFrame::OnClose, this);
+
     ApplyScheme(scheme);
   }
 
@@ -89,11 +97,11 @@ private:
     dc.SetBrush(*wxTRANSPARENT_BRUSH);
     dc.DrawRectangle(0, 0, size.GetWidth(), size.GetHeight());
 
-    // Custom title bar.
     dc.SetPen(*wxTRANSPARENT_PEN);
     dc.SetBrush(wxBrush(m_palette.panelBackground));
     dc.DrawRectangle(1, 1, size.GetWidth() - 2, 35);
     DrawText(dc, "OBJECT INSPECTOR", 14, 10, tiny, m_palette.textSecondary);
+
     m_closeRect = wxRect(size.GetWidth() - 36, 1, 35, 35);
     if (m_closeHover) {
       dc.SetBrush(wxBrush(m_palette.panelBorder));
@@ -114,7 +122,6 @@ private:
     DrawRule(dc, y);
     y += 18;
 
-    // Navigation-first presentation.
     DrawText(dc, "NORTH CARDINAL", 48, y, value, m_palette.textPrimary);
     dc.SetPen(wxPen(m_palette.textPrimary, 2));
     dc.SetBrush(*wxTRANSPARENT_BRUSH);
@@ -135,7 +142,6 @@ private:
     DrawRule(dc, y);
     y += 18;
 
-    // Quiet status: normal data is deliberately not green.
     DrawText(dc, "CHART SOURCE", 18, y, tiny, m_palette.textSecondary);
     DrawText(dc, "DK ENC · current", 150, y - 1, label, m_palette.textPrimary);
     y += 30;
@@ -186,29 +192,27 @@ private:
   void OnLeftDown(wxMouseEvent &event) {
     const wxPoint p = event.GetPosition();
     if (m_closeRect.Contains(p)) {
-      m_frame->Hide();
+      Hide();
       return;
     }
     if (m_technicalRect.Contains(p)) {
       m_technicalExpanded = !m_technicalExpanded;
-      const int h = m_technicalExpanded ? 585 : 465;
-      m_frame->SetClientSize(wxSize(370, h));
+      SetClientSize(wxSize(370, m_technicalExpanded ? 585 : 465));
       Refresh(false);
       return;
     }
     if (p.y <= 35) {
       m_dragging = true;
       m_dragStartMouse = wxGetMousePosition();
-      m_dragStartFrame = m_frame->GetPosition();
+      m_dragStartFrame = GetPosition();
       CaptureMouse();
     }
   }
 
   void OnLeftUp(wxMouseEvent &) {
-    if (m_dragging) {
-      m_dragging = false;
-      if (HasCapture()) ReleaseMouse();
-    }
+    if (!m_dragging) return;
+    m_dragging = false;
+    if (HasCapture()) ReleaseMouse();
   }
 
   void OnMotion(wxMouseEvent &event) {
@@ -220,9 +224,10 @@ private:
       m_technicalHover = technicalHover;
       Refresh(false);
     }
+
     if (m_dragging && event.Dragging() && event.LeftIsDown()) {
       const wxPoint delta = wxGetMousePosition() - m_dragStartMouse;
-      m_frame->Move(m_dragStartFrame + delta);
+      Move(m_dragStartFrame + delta);
     }
   }
 
@@ -234,7 +239,11 @@ private:
     }
   }
 
-  wxFrame *m_frame = nullptr;
+  void OnClose(wxCloseEvent &event) {
+    Hide();
+    event.Veto();
+  }
+
   PI_ColorScheme m_scheme = PI_GLOBAL_COLOR_SCHEME_DAY;
   maritime_ui::Palette m_palette;
   wxRect m_closeRect;
@@ -267,7 +276,6 @@ bool MaritimeUiPi::DeInit() {
   if (m_window) {
     m_window->Destroy();
     m_window = nullptr;
-    m_canvas = nullptr;
   }
   return true;
 }
@@ -284,7 +292,7 @@ wxString MaritimeUiPi::GetShortDescription() {
   return "Navigation-oriented maritime HMI design demonstrator.";
 }
 wxString MaritimeUiPi::GetLongDescription() {
-  return "V2 demonstrator for a compact custom-drawn maritime interaction "
+  return "V2.1 demonstrator for a compact custom-drawn maritime interaction "
          "layer following OpenCPN DAY, DUSK and NIGHT colour schemes.";
 }
 
@@ -309,24 +317,13 @@ void MaritimeUiPi::BuildToolbarBitmap() {
 
 void MaritimeUiPi::EnsureWindow() {
   if (m_window) return;
-
-  wxWindow *parent = GetOCPNCanvasWindow();
-  m_window = new wxFrame(parent, wxID_ANY, wxEmptyString, wxDefaultPosition,
-                         wxSize(370, 465),
-                         wxFRAME_TOOL_WINDOW | wxSTAY_ON_TOP | wxBORDER_NONE);
-  m_canvas = new DemoCanvas(m_window, m_colorScheme);
-  wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);
-  sizer->Add(m_canvas, 1, wxEXPAND);
-  m_window->SetSizer(sizer);
-  m_window->SetClientSize(wxSize(370, 465));
-  m_window->SetMinClientSize(wxSize(370, 465));
-  ApplyTheme();
+  m_window = new DemoFrame(GetOCPNCanvasWindow(), m_colorScheme);
 }
 
 void MaritimeUiPi::ApplyTheme() {
-  if (!m_canvas) return;
-  DemoCanvas *canvas = dynamic_cast<DemoCanvas *>(m_canvas);
-  if (canvas) canvas->ApplyScheme(m_colorScheme);
+  if (!m_window) return;
+  DemoFrame *frame = dynamic_cast<DemoFrame *>(m_window);
+  if (frame) frame->ApplyScheme(m_colorScheme);
 }
 
 void MaritimeUiPi::ToggleWindow() {
@@ -338,6 +335,7 @@ void MaritimeUiPi::ToggleWindow() {
     ApplyTheme();
     m_window->Show();
     m_window->Raise();
+    m_window->Refresh(false);
   }
 }
 
