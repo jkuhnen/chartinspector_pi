@@ -31,15 +31,12 @@ private:
   void EnsureWindow();
   void ApplyTheme();
   void ToggleWindow();
-  wxPanel *CreateCard(wxWindow *parent, const wxString &eyebrow,
-                      const wxString &title, const wxString &body);
-  wxPanel *CreateStatusRow(wxWindow *parent, const wxString &label,
-                           const wxString &value, int semantic);
 
   int m_toolbarId = -1;
   wxBitmap m_pluginBitmap;
   wxBitmap m_toolbarBitmap;
   wxFrame *m_window = nullptr;
+  wxPanel *m_canvas = nullptr;
   PI_ColorScheme m_colorScheme = PI_GLOBAL_COLOR_SCHEME_DAY;
 };
 
