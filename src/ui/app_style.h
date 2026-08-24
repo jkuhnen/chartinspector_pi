@@ -8,6 +8,11 @@
 
 namespace ci_ui {
 
+// Maritime HMI palette used by Chart Inspector.
+//
+// Red, amber/yellow and green are deliberately not generic interaction
+// colours. They are reserved for safety/status semantics and for literal
+// chart content such as the encoded colour of a navigational light.
 struct AppPalette {
   wxColour windowBackground;
   wxColour cardBackground;
@@ -15,6 +20,8 @@ struct AppPalette {
   wxColour textPrimary;
   wxColour textSecondary;
   wxColour accent;
+  wxColour focus;
+  wxColour focusHalo;
 };
 
 class AppStyle {
@@ -24,9 +31,9 @@ public:
   static const int kSpaceMd = 12;
   static const int kSpaceLg = 16;
   static const int kSpaceXl = 24;
-  static const int kCardRadius = 10;
+  static const int kCardRadius = 4;
   static const int kCardPadding = 12;
-  static const int kLabelColumnWidth = 112;
+  static const int kLabelColumnWidth = 120;
   static const int kColorChipSize = 16;
 
   static AppPalette PaletteFor(PI_ColorScheme scheme);
