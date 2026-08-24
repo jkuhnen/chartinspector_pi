@@ -13,7 +13,7 @@ find_package(OpenGL REQUIRED)
 include(${wxWidgets_USE_FILE})
 
 add_library(chartinspector_pi SHARED
-    src/chartinspector_pi.cpp
+    src/chartinspector_modern.cpp
     src/chartinspector_pi.h
     src/s57_catalog.cpp
     src/s57_catalog.h
