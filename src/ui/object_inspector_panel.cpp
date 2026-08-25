@@ -61,6 +61,45 @@ wxString Ellipsize(wxDC &dc, const wxString &text, int maxWidth) {
   return dots;
 }
 
+std::vector<wxString> WrapToLines(wxDC &dc, const wxString &text,
+                                  int maxWidth, int maxLines = 2) {
+  std::vector<wxString> lines;
+  wxString remaining = text;
+  remaining.Trim(true);
+  remaining.Trim(false);
+  while (!remaining.IsEmpty() && static_cast<int>(lines.size()) < maxLines) {
+    wxCoord w = 0, h = 0;
+    dc.GetTextExtent(remaining, &w, &h);
+    if (w <= maxWidth) {
+      lines.push_back(remaining);
+      break;
+    }
+    int split = static_cast<int>(remaining.length());
+    while (split > 0) {
+      wxString candidate = remaining.Left(split);
+      dc.GetTextExtent(candidate, &w, &h);
+      if (w <= maxWidth) break;
+      --split;
+    }
+    if (split <= 0) {
+      lines.push_back(Ellipsize(dc, remaining, maxWidth));
+      break;
+    }
+    const int space = remaining.Left(split).Find(' ', true);
+    if (space > 0) split = space;
+    wxString line = remaining.Left(split);
+    line.Trim(true);
+    line.Trim(false);
+    if (line.IsEmpty()) line = Ellipsize(dc, remaining, maxWidth);
+    lines.push_back(line);
+    remaining = remaining.Mid(split);
+    remaining.Trim(false);
+    if (static_cast<int>(lines.size()) == maxLines && !remaining.IsEmpty())
+      lines.back() = Ellipsize(dc, lines.back() + " " + remaining, maxWidth);
+  }
+  return lines;
+}
+
 }  // namespace
 
 ObjectInspectorPanel::ObjectInspectorPanel(wxWindow *parent)
@@ -93,7 +132,9 @@ void ObjectInspectorPanel::RecalculateSize() {
   if (!m_data.cardinalLabel.IsEmpty()) h += 62;
   if (!m_data.lightSummary.IsEmpty()) h += 68;
   if (!m_data.primaryValue.IsEmpty()) h += 58;
-  h += static_cast<int>(m_data.properties.size()) * 25;
+  for (const auto &prop : m_data.properties) {
+    h += prop.value.length() > 28 ? 43 : 25;
+  }
   if (m_data.scaleHidden) h += 28;
   h += 58;
   if (m_technicalExpanded && !m_data.technical.IsEmpty()) {
@@ -102,7 +143,7 @@ void ObjectInspectorPanel::RecalculateSize() {
       if (m_data.technical[i] == '\n') ++lines;
     h += lines * 22 + 8;
   }
-  h = wxMax(245, wxMin(650, h));
+  h = wxMax(245, wxMin(680, h));
   SetSize(wxSize(370, h));
   SetMinSize(wxSize(370, h));
 }
@@ -196,9 +237,12 @@ void ObjectInspectorPanel::OnPaint(wxPaintEvent &) {
       valueX += 19;
     }
     dc.SetFont(label);
-    DrawText(dc, Ellipsize(dc, prop.value, valueWidth - (valueX - valueColumn)),
-             valueX, y - 1, label, p.textPrimary);
-    y += 25;
+    const int available = valueWidth - (valueX - valueColumn);
+    const auto wrapped = WrapToLines(dc, prop.value, available, 2);
+    for (size_t i = 0; i < wrapped.size(); ++i)
+      DrawText(dc, wrapped[i], valueX, y - 1 + static_cast<int>(i) * 18,
+               label, p.textPrimary);
+    y += wrapped.size() > 1 ? 43 : 25;
   }
 
   if (m_data.scaleHidden) {
@@ -277,9 +321,8 @@ void ObjectInspectorPanel::OnMotion(wxMouseEvent &event) {
     m_technicalHover = th;
     Refresh(false);
   }
-  if (m_dragging && event.Dragging() && event.LeftIsDown()) {
+  if (m_dragging && event.Dragging() && event.LeftIsDown())
     Move(m_dragStartPanel + (wxGetMousePosition() - m_dragStartMouse));
-  }
 }
 
 void ObjectInspectorPanel::OnLeave(wxMouseEvent &) {
