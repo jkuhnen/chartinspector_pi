@@ -137,6 +137,8 @@ See [`docs/MARITIME_HMI.md`](docs/MARITIME_HMI.md) for the design rationale and 
 
 The preview currently builds against OpenCPN plugin API 1.18 and wxWidgets. The experimental vector-object query host/provider changes are not yet part of upstream OpenCPN, so a matching development build is currently required.
 
+Shared development conventions are available in the development-only `.devkit` submodule. Contributors and coding agents who want the full guidance should clone with `--recurse-submodules` or run `git submodule update --init --recursive`; the DevKit is not a runtime, build, or packaging dependency.
+
 ## Roadmap
 
 - [x] Canvas mouse interaction.
