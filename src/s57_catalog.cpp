@@ -85,8 +85,6 @@ wxString S57Catalog::FormatAttributes(const wxString &rawAttributes,
     const wxString rawValue = Trimmed(line.Mid(equals + 1));
     if (acronym.StartsWith("$")) continue;
 
-    // SCAMIN/SCAMAX are portrayal metadata, useful for diagnostics but not
-    // useful in the normal readable object card. They remain in technical data.
     if (acronym == "SCAMIN" || acronym == "SCAMAX") continue;
 
     wxString catalogLabel = acronym;
@@ -284,6 +282,9 @@ wxString S57Catalog::DecodeAttributeValue(const wxString &acronym,
     if (valueIt != tableIt->second.end()) {
       text = valueIt->second;
       decoded = true;
+    } else {
+      long numericCode = 0;
+      if (token.ToLong(&numericCode)) text = "Code " + token;
     }
     text = UppercaseFirst(text);
     if (!result.IsEmpty()) result += ", ";
