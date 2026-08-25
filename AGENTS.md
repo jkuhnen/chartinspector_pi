@@ -2,6 +2,28 @@
 
 These instructions apply to all AI-assisted work in this repository.
 
+## Shared DevKit guidance
+
+`jkuhnen/opencpn-plugin-devkit`, checked out at `.devkit`, is the shared development baseline for this plugin. Before changes involving architecture, OpenCPN API behavior, Windows builds, packaging, CI, Git workflow, maritime HMI, or design-system work, read `.devkit/AGENTS.md` and the relevant documents under `.devkit/docs/`.
+
+Chart Inspector's local `AGENTS.md`, `README.md`, `docs/MARITIME_HMI.md`, source code, and issue-specific requirements remain authoritative for Chart Inspector-specific behavior. When a local documented rule intentionally differs from a DevKit convention, the local rule wins in this repository and the difference must be called out in the pull request. Verified upstream OpenCPN and API behavior remains authoritative over both local and DevKit conventions.
+
+Use this precedence order:
+
+```text
+verified upstream OpenCPN/API behavior
+        ↓
+issue/task-specific requirements
+        ↓
+Chart Inspector local documented rules
+        ↓
+shared DevKit conventions
+        ↓
+agent assumptions
+```
+
+Do not silently update the `.devkit` submodule pointer during unrelated feature work. If `.devkit` is uninitialized locally, run `git submodule update --init --recursive` before relying on its contents; do not fabricate missing guidance.
+
 ## Project context
 
 - Chart Inspector is an OpenCPN plugin developed primarily on Windows 11 with MSVC, CMake, wxWidgets, and OpenGL.
