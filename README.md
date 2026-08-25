@@ -4,11 +4,22 @@ Chart Inspector is an OpenCPN plugin for direct, readable inspection of vector c
 
 Move the pointer over a chart feature and Chart Inspector highlights the selected object on the chart and shows the information which matters for navigation: object type, depth or clearance, category, colour, light characteristic, range, restrictions and other relevant attributes.
 
-> **Status:** 0.3.0 preview. The plugin is functional and currently being tested with vector charts and o-charts. It depends on an experimental read-only vector-object query extension which is being prepared as a generic OpenCPN API proposal.
+> **Status:** 0.4.0 development preview. The plugin is functional and currently being tested with vector charts and o-charts. It depends on an experimental read-only vector-object query extension which is being prepared as a generic OpenCPN API proposal.
 
 ## Preview
 
-![Chart Inspector highlighting a west cardinal buoy](docs/images/cardinal_preview_optimized.png)
+The current inspector uses a compact navigation-first presentation while leaving the chart visually primary.
+
+<table>
+<tr>
+<td><img src="docs/images/chartinspector_2_05.png" alt="West cardinal buoy inspector" width="460"></td>
+<td><img src="docs/images/chartinspector_2_04.png" alt="Sector light inspector" width="460"></td>
+</tr>
+<tr>
+<td><em>Cardinal buoy: semantic topmark, colour pattern and compact technical disclosure.</em></td>
+<td><em>Light: characteristic and nominal range receive the strongest visual priority.</em></td>
+</tr>
+</table>
 
 ▶ **[Watch the short Chart Inspector demo](https://youtu.be/ziPwUMbQ6nQ)**
 
@@ -23,41 +34,46 @@ Chart Inspector is intended to answer a simple question quickly:
 ## Current features
 
 - Live hover selection of vector chart features.
-- Cyan overlay highlighting without changing official chart symbology.
+- Neutral blue/cyan interaction highlighting without changing official chart symbology.
 - Full line and area boundary highlighting.
-- Compact floating information window which follows the selected chart object.
+- Compact custom-drawn information panel for hover and persistent selection.
 - Navigation-first presentation of S-57 attributes.
-- Decoded object categories, colours and light information.
-- S-57 colour chips for aids to navigation.
+- Decoded object categories, colours, light information, depths and restrictions.
+- Literal S-57 colour chips for aids to navigation.
 - Associated light information for buoys and beacons where available.
+- Cardinal topmark pictograms derived from the real `CATCAM` attribute.
 - Object-class filtering in plugin preferences.
 - Natural/background chart geometry is excluded from the default selectable profile.
-- Optional technical footer for S-57 class, geometry, SCAMIN and related metadata.
-- Day/Dusk/Night-aware UI styling.
+- Collapsible source/technical section for S-57 class, geometry, SCAMIN and related metadata.
+- Day/Dusk/Night-aware UI styling derived from OpenCPN.
 
 ## Interaction
 
 1. Move the pointer over a selectable vector feature.
 2. The most relevant object near the pointer is highlighted.
 3. Chart Inspector shows a concise navigation-oriented description.
-4. Technical chart metadata can optionally be enabled in Preferences.
+4. Clicking an object creates a persistent selection using the same inspector language.
+5. Source and technical chart metadata remain subordinate and can be expanded when needed.
 
-Examples of the intended presentation:
+Examples of the intended information hierarchy:
 
 ```text
-Underwater rock / awash rock
-Depth: 0.9 m
+Wreck
+16.1 m
+Depth
 
-Water level effect     Always under water/submerged
+Water level effect    Always under water/submerged
 ```
 
 ```text
-Buoy, safe water
+Light
+Fl W 5 s                         13 NM
+Light characteristic             Nominal range
 
-Name                   No 5
-Color                  [red] [white]  Red, White
-Colour pattern         Vertical stripes
-Light                  [white] LFl W 10 s
+Color              White
+Sector start       330°
+Sector end         343°
+Height             30 m
 ```
 
 ## Architecture
@@ -87,22 +103,25 @@ The default profile focuses on visible physical, man-made and navigation-relevan
 
 Background/natural chart geometry such as coastlines, depth areas and seabed polygons is not selected by default. Exact feature classes can be changed in Preferences.
 
-OpenCPN portrayal controls remain authoritative. The plugin is not intended to resurrect objects explicitly hidden by the user's display settings.
+OpenCPN portrayal controls remain authoritative. The plugin is not intended to resurrect objects explicitly hidden by the user's display settings. An optional scale-hidden inspection mode exists for selected navigation objects and is shown explicitly as an informational state when used.
 
-## UI / AppStyle
+## Maritime UI
 
-Chart Inspector is also the reference implementation for a small reusable OpenCPN plugin UI language called **AppStyle v1**.
+Chart Inspector uses a restrained maritime HMI language designed with reference to IMO MSC.191(79), IMO MSC.1/Circ.1609, IEC 62288 and IHO S-52 presentation principles.
 
-It uses:
+This is a design reference, not a statement of type approval or ECDIS compliance.
 
-- native platform fonts and window chrome;
-- a 4 / 8 / 12 / 16 / 24 px spacing system;
-- navigation-first information hierarchy;
-- rounded property cards;
-- semantic Day/Dusk/Night colours derived from OpenCPN;
-- true S-57 navigation colours for chart-object colour chips.
+The main rules are:
 
-See `docs/app-style-v1.md`.
+- the chart remains the primary operational surface;
+- OpenCPN DAY / DUSK / NIGHT remains authoritative;
+- navigation-critical values receive the strongest hierarchy;
+- red, amber/yellow and green are not generic interaction colours;
+- literal chart colours remain literal;
+- normal source/technical metadata is visually subordinate;
+- hover and persistent selection remain distinct from safety alerts.
+
+See [`docs/MARITIME_HMI.md`](docs/MARITIME_HMI.md) for the design rationale and real examples.
 
 ## Development principles
 
@@ -112,6 +131,7 @@ See `docs/app-style-v1.md`.
 - Keep pointer-hover queries bounded and fast.
 - Prefer small generic OpenCPN API improvements over provider-specific workarounds.
 - Present navigation information before technical metadata.
+- Keep the OpenCPN core patch as small as possible and target the generic vector-query work for upstream inclusion.
 
 ## Building
 
@@ -125,7 +145,8 @@ The preview currently builds against OpenCPN plugin API 1.18 and wxWidgets. The 
 - [x] Compact navigation-first information window.
 - [x] S-57 attribute decoding and colour chips.
 - [x] Selectable feature-class preferences.
-- [x] Shared AppStyle v1 foundation.
+- [x] Shared maritime HMI foundation.
+- [x] Unified compact inspector for hover and persistent selection.
 - [ ] Reduce and submit the generic OpenCPN vector-object query API upstream.
 - [ ] Submit matching provider support where required.
 - [ ] Test on additional platforms and chart providers.

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(chartinspector VERSION 0.3.0.0 LANGUAGES CXX)
+project(chartinspector VERSION 0.4.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,7 +13,7 @@ find_package(OpenGL REQUIRED)
 include(${wxWidgets_USE_FILE})
 
 add_library(chartinspector_pi SHARED
-    src/chartinspector_pi.cpp
+    src/chartinspector_modern.cpp
     src/chartinspector_pi.h
     src/s57_catalog.cpp
     src/s57_catalog.h
@@ -21,6 +21,8 @@ add_library(chartinspector_pi SHARED
     src/ui/app_style.h
     src/ui/rounded_panel.cpp
     src/ui/rounded_panel.h
+    src/ui/object_inspector_panel.cpp
+    src/ui/object_inspector_panel.h
 )
 
 target_include_directories(chartinspector_pi PRIVATE

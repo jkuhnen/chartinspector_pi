@@ -83,6 +83,46 @@ Persistent selection should be stronger than hover while remaining outside the a
 
 The light-characteristic preview is a schematic aid. The encoded chart attributes remain authoritative. Animation must never be used as a generic attention mechanism.
 
+## Current interaction pattern
+
+The compact inspector is intentionally narrow and uses the same presentation language for hover and persistent selection.
+
+The panel header remains quiet. The first strong element is the object identity. When a navigation-critical value exists, it receives the largest type. Operational attributes follow in a simple label/value grid. Source and technical metadata stays behind a disclosure row.
+
+For objects where the chart encoding contains a semantically useful visual cue, the inspector may draw a small explanatory pictogram. The cardinal topmark is an example: it is derived from `CATCAM`, but it is an inspector aid and is not presented as a replacement for the official S-52 chart symbol.
+
+## Real examples
+
+### Cardinal buoy
+
+![West cardinal buoy inspector](images/chartinspector_2_05.png)
+
+The cardinal direction is promoted from a generic attribute into the object identity. The topmark pictogram and encoded yellow/black colour pattern support recognition without competing with the chart portrayal.
+
+### Sector light
+
+![Sector light inspector](images/chartinspector_2_04.png)
+
+The encoded light characteristic and nominal range are the hero values. Sector bearings, colour and height remain clearly secondary. Literal signal colours stay literal.
+
+### Obstruction
+
+![Obstruction inspector](images/chartinspector_2_03.png)
+
+Operational meaning is prioritised over raw S-57 acronyms: sounding quality, obstruction category and explanatory information can be scanned without exposing implementation detail.
+
+### Isolated danger buoy
+
+![Isolated danger buoy inspector](images/chartinspector_2_02.png)
+
+When no single numeric value dominates, the inspector remains compact and presents the encoded colour/pattern information without inventing unnecessary hierarchy.
+
+### Restricted area
+
+![Restricted area inspector](images/chartinspector_2_01.png)
+
+Long operational restrictions are allowed to wrap rather than being truncated. Unknown enumeration values are shown explicitly as codes instead of being silently interpreted.
+
 ## Palette ownership
 
 `src/ui/app_style.*` is the single source of truth for Chart Inspector UI palette and typography.
