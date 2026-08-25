@@ -21,7 +21,7 @@ The current inspector uses a compact navigation-first presentation while leaving
 </tr>
 </table>
 
-▶ **[Watch the short Chart Inspector demo](https://youtu.be/ziPwUMbQ6nQ)**
+▶ **[Watch the short Chart Inspector demo](https://youtu.be/r323OL1Vbn0)**
 
 ## Why
 
