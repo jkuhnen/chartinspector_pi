@@ -351,7 +351,8 @@ void ChartInspectorPi::BuildToolbarBitmaps() {
   const char *disabledSvg = day ? chartinspector_icon::kNavySvg
                                 : chartinspector_icon::kWhiteSvg;
 
-  m_pluginBitmap = CI_BitmapFromSvg(enabledSvg, CI_ICON_IDENTITY_SIZE);
+  m_pluginBitmap = CI_BitmapFromSvg(chartinspector_icon::kDaySvg,
+                                    CI_ICON_IDENTITY_SIZE);
   // OpenCPN rescales plugin bitmaps to the configured toolbar dimensions.
   // A larger embedded source keeps the approved geometry crisp at high DPI.
   m_toolbarEnabledBitmap =
