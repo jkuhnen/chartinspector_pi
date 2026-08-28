@@ -12,6 +12,27 @@ find_package(wxWidgets REQUIRED COMPONENTS base core aui)
 find_package(OpenGL REQUIRED)
 include(${wxWidgets_USE_FILE})
 
+set(CHARTINSPECTOR_ICON_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/chartinspector.svg
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/chartinspector-white.svg
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/chartinspector-navy.svg
+)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${CHARTINSPECTOR_ICON_FILES}
+)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/chartinspector.svg
+    CHARTINSPECTOR_ICON_DAY_SVG)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/chartinspector-white.svg
+    CHARTINSPECTOR_ICON_WHITE_SVG)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/chartinspector-navy.svg
+    CHARTINSPECTOR_ICON_NAVY_SVG)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/generated)
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/chartinspector_icon_data.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/chartinspector_icon_data.h
+    @ONLY
+)
+
 add_library(chartinspector_pi SHARED
     src/chartinspector_modern.cpp
     src/chartinspector_pi.h
@@ -27,6 +48,7 @@ add_library(chartinspector_pi SHARED
 
 target_include_directories(chartinspector_pi PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
 add_subdirectory(opencpn-libs/api-18)

@@ -1,0 +1,12 @@
+#ifndef CHARTINSPECTOR_ICON_DATA_H
+#define CHARTINSPECTOR_ICON_DATA_H
+
+namespace chartinspector_icon {
+
+static const char kDaySvg[] = R"ci_icon(@CHARTINSPECTOR_ICON_DAY_SVG@)ci_icon";
+static const char kWhiteSvg[] = R"ci_icon(@CHARTINSPECTOR_ICON_WHITE_SVG@)ci_icon";
+static const char kNavySvg[] = R"ci_icon(@CHARTINSPECTOR_ICON_NAVY_SVG@)ci_icon";
+
+}  // namespace chartinspector_icon
+
+#endif  // CHARTINSPECTOR_ICON_DATA_H
