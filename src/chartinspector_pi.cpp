@@ -1,4 +1,5 @@
 #include "chartinspector_pi.h"
+#include "chartinspector_icon_data.h"
 #include "ui/app_style.h"
 #include "ui/rounded_panel.h"
 
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include <GL/gl.h>
+#include <wx/bmpbndl.h>
 #include <wx/checklst.h>
 #include <wx/dcbuffer.h>
 #include <wx/dcclient.h>
@@ -21,6 +23,29 @@
 #include <wx/tokenzr.h>
 
 namespace {
+constexpr int CI_ICON_IDENTITY_SIZE = 32;
+constexpr int CI_ICON_TOOLBAR_SOURCE_SIZE = 64;
+constexpr unsigned char CI_ICON_DAY_UNCHECKED_OPACITY = 180;
+constexpr unsigned char CI_ICON_DARK_UNCHECKED_OPACITY = 150;
+
+wxBitmap CI_BitmapFromSvg(const char *svg, int size) {
+  const wxSize bitmapSize(size, size);
+  const wxBitmapBundle bundle = wxBitmapBundle::FromSVG(svg, bitmapSize);
+  return bundle.GetBitmap(bitmapSize);
+}
+
+wxBitmap CI_WithOpacity(const wxBitmap &bitmap, unsigned char opacity) {
+  wxImage image = bitmap.ConvertToImage();
+  if (!image.HasAlpha()) image.InitAlpha();
+  unsigned char *alpha = image.GetAlpha();
+  const int pixelCount = image.GetWidth() * image.GetHeight();
+  for (int i = 0; i < pixelCount; ++i) {
+    alpha[i] = static_cast<unsigned char>(
+        (static_cast<unsigned int>(alpha[i]) * opacity) / 255u);
+  }
+  return wxBitmap(image);
+}
+
 // CHARTINSPECTOR_VECTOR_HOVER_V1
 struct CI_VectorQueryV1 {
   uint32_t struct_size; double lat; double lon; double search_radius_pixels;
@@ -272,9 +297,10 @@ int ChartInspectorPi::Init() {
   m_config = GetOCPNConfigObject();
   LoadConfig();
   BuildToolbarBitmaps();
-  m_pluginBitmap = m_enabled ? m_toolbarEnabledBitmap : m_toolbarDisabledBitmap;
+  wxBitmap *toolbarBitmap =
+      m_enabled ? &m_toolbarEnabledBitmap : &m_toolbarDisabledBitmap;
   m_toolbarId = InsertPlugInTool(
-      "Chart Inspector", &m_pluginBitmap, &m_pluginBitmap, wxITEM_CHECK,
+      "Chart Inspector", toolbarBitmap, toolbarBitmap, wxITEM_CHECK,
       "Chart Inspector", "Enable or disable chart object inspection", nullptr,
       -1, 0, this);
   UpdateToolbarVisual();
@@ -318,22 +344,21 @@ wxString ChartInspectorPi::GetLongDescription() {
 }
 
 void ChartInspectorPi::BuildToolbarBitmaps() {
-  const ci_ui::AppPalette palette = ci_ui::AppStyle::PaletteFor(m_colorScheme);
-  auto build = [&](const wxColour &colour, bool active) {
-    wxBitmap bitmap(24, 24);
-    wxMemoryDC dc(bitmap);
-    dc.SetBackground(wxBrush(palette.windowBackground));
-    dc.Clear();
-    dc.SetPen(wxPen(colour, active ? 3 : 2));
-    dc.SetBrush(active ? wxBrush(colour) : *wxTRANSPARENT_BRUSH);
-    dc.DrawCircle(wxPoint(9, 9), 5);
-    dc.SetBrush(*wxTRANSPARENT_BRUSH);
-    dc.DrawLine(13, 13, 21, 21);
-    dc.SelectObject(wxNullBitmap);
-    return bitmap;
-  };
-  m_toolbarEnabledBitmap = build(palette.focus, true);
-  m_toolbarDisabledBitmap = build(palette.textSecondary, false);
+  const bool day = m_colorScheme == PI_GLOBAL_COLOR_SCHEME_DAY ||
+                   m_colorScheme == PI_GLOBAL_COLOR_SCHEME_RGB;
+  const char *enabledSvg = day ? chartinspector_icon::kDaySvg
+                               : chartinspector_icon::kWhiteSvg;
+  const char *disabledSvg = day ? chartinspector_icon::kNavySvg
+                                : chartinspector_icon::kWhiteSvg;
+
+  m_pluginBitmap = CI_BitmapFromSvg(enabledSvg, CI_ICON_IDENTITY_SIZE);
+  // OpenCPN rescales plugin bitmaps to the configured toolbar dimensions.
+  // A larger embedded source keeps the approved geometry crisp at high DPI.
+  m_toolbarEnabledBitmap =
+      CI_BitmapFromSvg(enabledSvg, CI_ICON_TOOLBAR_SOURCE_SIZE);
+  m_toolbarDisabledBitmap = CI_WithOpacity(
+      CI_BitmapFromSvg(disabledSvg, CI_ICON_TOOLBAR_SOURCE_SIZE),
+      day ? CI_ICON_DAY_UNCHECKED_OPACITY : CI_ICON_DARK_UNCHECKED_OPACITY);
 }
 
 void ChartInspectorPi::UpdateToolbarVisual() {
